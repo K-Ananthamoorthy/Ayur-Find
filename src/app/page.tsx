@@ -1,8 +1,8 @@
-"use client"
+'use client'
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock } from 'lucide-react'
+import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { db } from '@/lib/firebase'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore'
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -39,6 +40,14 @@ interface Doctor {
   rating: number;
   lat: number;
   lng: number;
+  experience: number;
+  tags: string[];
+  about: string;
+  services: string[];
+  education: string;
+  availability: {
+    [key: string]: string;
+  };
 }
 
 interface Appointment {
@@ -57,6 +66,7 @@ interface UserProfile {
   fullName: string;
   email: string;
   phone: string;
+  favoriteDoctors: string[];
 }
 
 export default function AyurvedicDoctorLocator() {
@@ -64,16 +74,18 @@ export default function AyurvedicDoctorLocator() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
   const [doctors, setDoctors] = useState<Doctor[]>([])
-  const [favorites, setFavorites] = useState<Doctor[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [userProfile, setUserProfile] = useState<UserProfile>({
     id: '',
     fullName: '',
     email: '',
-    phone: ''
+    phone: '',
+    favoriteDoctors: []
   })
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
+  const [sortOption, setSortOption] = useState('rating')
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
 
   useEffect(() => {
     setMounted(true)
@@ -81,53 +93,89 @@ export default function AyurvedicDoctorLocator() {
   }, [])
 
   const fetchData = async () => {
-    const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
-    const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
-    setDoctors(doctorsData)
+    try {
+      const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
+      const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
+      setDoctors(doctorsData)
 
-    const favoritesSnapshot = await getDocs(collection(db, 'favorites'))
-    const favoritesData = favoritesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
-    setFavorites(favoritesData)
+      const appointmentsSnapshot = await getDocs(collection(db, 'appointments'))
+      const appointmentsData = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
+      setAppointments(appointmentsData)
 
-    const appointmentsSnapshot = await getDocs(collection(db, 'appointments'))
-    const appointmentsData = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
-    setAppointments(appointmentsData)
-
-    const userProfileSnapshot = await getDocs(collection(db, 'userProfiles'))
-    if (!userProfileSnapshot.empty) {
-      const userProfileData = userProfileSnapshot.docs[0].data() as UserProfile
-      setUserProfile({ ...userProfileData, id: userProfileSnapshot.docs[0].id })
+      const userProfileSnapshot = await getDocs(collection(db, 'userProfiles'))
+      if (!userProfileSnapshot.empty) {
+        const userProfileData = userProfileSnapshot.docs[0].data() as UserProfile
+        setUserProfile({ ...userProfileData, id: userProfileSnapshot.docs[0].id })
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error)
     }
   }
 
   const toggleFavorite = async (doctor: Doctor) => {
-    const isFavorite = favorites.some(fav => fav.id === doctor.id)
-    if (isFavorite) {
-      await deleteDoc(doc(db, 'favorites', doctor.id))
-      setFavorites(favorites.filter(fav => fav.id !== doctor.id))
-    } else {
-      const docRef = await addDoc(collection(db, 'favorites'), doctor)
-      setFavorites([...favorites, { ...doctor, id: docRef.id }])
+    try {
+      const updatedFavorites = userProfile.favoriteDoctors?.includes(doctor.id)
+        ? userProfile.favoriteDoctors.filter(id => id !== doctor.id)
+        : [...(userProfile.favoriteDoctors || []), doctor.id]
+
+      await updateDoc(doc(db, 'userProfiles', userProfile.id), {
+        favoriteDoctors: updatedFavorites
+      })
+
+      setUserProfile(prev => ({
+        ...prev,
+        favoriteDoctors: updatedFavorites
+      }))
+    } catch (error) {
+      console.error("Error toggling favorite:", error)
     }
   }
 
   const addAppointment = async (appointment: Omit<Appointment, 'id'>) => {
-    const docRef = await addDoc(collection(db, 'appointments'), appointment)
-    setAppointments([...appointments, { id: docRef.id, ...appointment }])
+    try {
+      const docRef = await addDoc(collection(db, 'appointments'), appointment)
+      setAppointments([...appointments, { id: docRef.id, ...appointment }])
+    } catch (error) {
+      console.error("Error adding appointment:", error)
+    }
   }
 
   const updateUserProfile = async (newProfile: Omit<UserProfile, 'id'>) => {
-    if (userProfile.id) {
-      await updateDoc(doc(db, 'userProfiles', userProfile.id), newProfile)
-      setUserProfile({ ...newProfile, id: userProfile.id })
-    } else {
-      const docRef = await addDoc(collection(db, 'userProfiles'), newProfile)
-      setUserProfile({ id: docRef.id, ...newProfile })
+    try {
+      if (userProfile.id) {
+        await updateDoc(doc(db, 'userProfiles', userProfile.id), newProfile)
+        setUserProfile({ ...newProfile, id: userProfile.id })
+      } else {
+        const docRef = await addDoc(collection(db, 'userProfiles'), newProfile)
+        setUserProfile({ id: docRef.id, ...newProfile })
+      }
+    } catch (error) {
+      console.error("Error updating user profile:", error)
     }
   }
 
   const popularLocations = ['Udupi Taluk', 'Kundapura', 'Karkala', 'Hebri']
   const popularSpecializations = ['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine']
+
+  const filteredDoctors = doctors.filter(doctor => 
+    (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
+  )
+
+  const sortedDoctors = [...filteredDoctors].sort((a, b) => {
+    switch (sortOption) {
+      case 'rating':
+        return b.rating - a.rating
+      case 'experience':
+        return b.experience - a.experience
+      case 'name':
+        return a.name.localeCompare(b.name)
+      default:
+        return 0
+    }
+  })
 
   if (!mounted) {
     return null
@@ -157,7 +205,10 @@ export default function AyurvedicDoctorLocator() {
             <h3 className="text-lg font-medium mb-2">Popular Locations</h3>
             <div className="flex flex-wrap gap-2">
               {popularLocations.map((location) => (
-                <Button key={location} variant="outline" size="sm" onClick={() => setCurrentPage('doctorListing')}>
+                <Button key={location} variant="outline" size="sm" onClick={() => {
+                  setSearchQuery(location)
+                  setCurrentPage('doctorListing')
+                }}>
                   <MapPin className="mr-2 h-4 w-4" />
                   {location}
                 </Button>
@@ -168,7 +219,10 @@ export default function AyurvedicDoctorLocator() {
             <h3 className="text-lg font-medium mb-2">Popular Specializations</h3>
             <div className="flex flex-wrap gap-2">
               {popularSpecializations.map((specialization) => (
-                <Button key={specialization} variant="outline" size="sm" onClick={() => setCurrentPage('doctorListing')}>
+                <Button key={specialization} variant="outline" size="sm" onClick={() => {
+                  setSearchQuery(specialization)
+                  setCurrentPage('doctorListing')
+                }}>
                   {specialization}
                 </Button>
               ))}
@@ -192,19 +246,44 @@ export default function AyurvedicDoctorLocator() {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <h2 className="text-2xl font-bold">Ayurvedic Doctors</h2>
-        <Select>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="rating">Highest Rated</SelectItem>
-            <SelectItem value="distance">Nearest</SelectItem>
-            <SelectItem value="experience">Most Experienced</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={sortOption} onValueChange={setSortOption}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rating">Highest Rated</SelectItem>
+              <SelectItem value="experience">Most Experienced</SelectItem>
+              <SelectItem value="name">Name (A-Z)</SelectItem>
+            </SelectContent>
+          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Tag className="mr-2 h-4 w-4" />
+                Filter Tags
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {Array.from(new Set(doctors.flatMap(d => d.tags))).map(tag => (
+                <DropdownMenuItem key={tag} onClick={() => setSelectedTags(prev => 
+                  prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                )}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTags.includes(tag)}
+                    onChange={() => {}}
+                    className="mr-2"
+                  />
+                  {tag}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {doctors.map((doctor) => (
+        {sortedDoctors.map((doctor) => (
           <Card key={doctor.id} className="cursor-pointer hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
@@ -217,13 +296,13 @@ export default function AyurvedicDoctorLocator() {
                     toggleFavorite(doctor)
                   }}
                 >
-                  <Star className={`h-5 w-5 ${favorites.some(fav => fav.id === doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+                  <Star className={`h-5 w-5 ${userProfile.favoriteDoctors?.includes(doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
                 </Button>
               </CardTitle>
               <CardDescription>{doctor.specialization}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center">
                   <MapPin className="h-4 w-4 mr-2" />
                   <span>{doctor.location}</span>
@@ -233,7 +312,16 @@ export default function AyurvedicDoctorLocator() {
                   <span>{doctor.rating}</span>
                 </div>
               </div>
-              <Button className="w-full mt-4" onClick={() => {
+              <div className="mb-2">
+                <Clock className="h-4 w-4 inline mr-2" />
+                <span>{doctor.experience} years experience</span>
+              </div>
+              <div className="flex flex-wrap gap-1 mb-4">
+                {doctor.tags.map(tag => (
+                  <Badge key={tag} variant="secondary">{tag}</Badge>
+                ))}
+              </div>
+              <Button className="w-full" onClick={() => {
                 setSelectedDoctor(doctor)
                 setCurrentPage('doctorProfile')
               }}>
@@ -264,7 +352,7 @@ export default function AyurvedicDoctorLocator() {
                   onClick={() => selectedDoctor && toggleFavorite(selectedDoctor)}
                 >
                   {selectedDoctor && (
-                    <Star className={`h-5 w-5 ${favorites.some(fav => fav.id === selectedDoctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+                    <Star className={`h-5 w-5 ${userProfile.favoriteDoctors?.includes(selectedDoctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
                   )}
                 </Button>
               </CardTitle>
@@ -282,7 +370,16 @@ export default function AyurvedicDoctorLocator() {
                 </div>
                 <div className="flex items-center">
                   <Clock className="h-5 w-5 mr-2" />
-                  <span>Mon-Fri: 9AM-5PM, Sat: 9AM-1PM</span>
+                  <span>{selectedDoctor?.experience} + years of experience</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Availability</h3>
+                  {selectedDoctor?.availability && Object.entries(selectedDoctor.availability).map(([day, hours]) => (
+                    <div key={day} className="flex justify-between">
+                      <span>{day}</span>
+                      <span>{hours}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex items-center">
                   <Phone className="h-5 w-5 mr-2" />
@@ -300,7 +397,19 @@ export default function AyurvedicDoctorLocator() {
               <CardTitle>About {selectedDoctor?.name}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>Dr. {selectedDoctor?.name.split(' ')[1]} is a highly experienced Ayurvedic practitioner specializing in {selectedDoctor?.specialization}. With over 15 years of experience, they have helped numerous patients achieve holistic wellness through traditional Ayurvedic treatments and modern techniques.</p>
+              <p>{selectedDoctor?.about}</p>
+              <div className="mt-4">
+                <h3 className="font-semibold mb-2">Education</h3>
+                <p>{selectedDoctor?.education}</p>
+              </div>
+              <div className="mt-4">
+                <h3 className="font-semibold mb-2">Specializations</h3>
+                <div className="flex flex-wrap gap-2">
+                  {selectedDoctor?.tags.map(tag => (
+                    <Badge key={tag}>{tag}</Badge>
+                  ))}
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -309,16 +418,14 @@ export default function AyurvedicDoctorLocator() {
             </CardHeader>
             <CardContent>
               <ul className="list-disc list-inside space-y-2">
-                <li>Ayurvedic Consultation</li>
-                <li>{selectedDoctor?.specialization}</li>
-                <li>Herbal Medicine</li>
-                <li>Dietary Counseling</li>
-                <li>Yoga and Meditation Guidance</li>
+                {selectedDoctor?.services.map(service => (
+                  <li key={service}>{service}</li>
+                ))}
               </ul>
             </CardContent>
           </Card>
         </div>
-        <div className="w-full lg:w-1/3  space-y-6">
+        <div className="w-full lg:w-1/3 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Book an Appointment</CardTitle>
@@ -417,8 +524,8 @@ export default function AyurvedicDoctorLocator() {
     <div className="max-w-4xl mx-auto space-y-8">
       <h2 className="text-2xl font-bold">User Profile</h2>
       <Tabs defaultValue="personal-info" className="w-full">
-      <TabsList className="flex flex-wrap w-full">
-          <TabsTrigger value="personal-info">user info</TabsTrigger>
+        <TabsList className="flex flex-wrap w-full">
+          <TabsTrigger value="personal-info">User Info</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="favorite-doctors">Favorite Doctors</TabsTrigger>
         </TabsList>
@@ -434,7 +541,8 @@ export default function AyurvedicDoctorLocator() {
                 const newProfile = {
                   fullName: formData.get('fullName') as string,
                   email: formData.get('email') as string,
-                  phone: formData.get('phone') as string
+                  phone: formData.get('phone') as string,
+                  favoriteDoctors: userProfile.favoriteDoctors
                 }
                 updateUserProfile(newProfile)
               }}>
@@ -493,7 +601,7 @@ export default function AyurvedicDoctorLocator() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {favorites.map((doctor) => (
+                {doctors.filter(doctor => userProfile.favoriteDoctors?.includes(doctor.id)).map((doctor) => (
                   <Card key={doctor.id}>
                     <CardHeader>
                       <CardTitle>{doctor.name}</CardTitle>
