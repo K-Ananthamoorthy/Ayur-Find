@@ -154,7 +154,7 @@ export default function AyurvedicDoctorLocator() {
     }
   }
 
-  const popularLocations = ['Udupi Taluk', 'Kundapura', 'Karkala', 'Hebri']
+  const popularLocations = ['Udupi', 'Kundapura', 'Karkala', 'Hebri']
   const popularSpecializations = ['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine']
 
   const filteredDoctors = doctors.filter(doctor => 
@@ -244,9 +244,15 @@ export default function AyurvedicDoctorLocator() {
 
   const renderDoctorListing = () => (
     <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <Button variant="ghost" onClick={() => setCurrentPage('home')}>
+          <ChevronLeft className="mr-1 h-4 w-2" />
+          Home
+        </Button>
+        <h2 className="text-1xl font-bold">Ayurvedic Doctors</h2>
+      </div>
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <h2 className="text-2xl font-bold">Ayurvedic Doctors</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select value={sortOption} onValueChange={setSortOption}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Sort by" />
@@ -365,7 +371,7 @@ export default function AyurvedicDoctorLocator() {
                   <span>{selectedDoctor?.location}</span>
                 </div>
                 <div className="flex items-center">
-                  <Star className="h-5 w-5 text-yellow-400 mr-2" />
+                  <Star  className="h-5 w-5 text-yellow-400 mr-2" />
                   <span>{selectedDoctor?.rating} (50 reviews)</span>
                 </div>
                 <div className="flex items-center">
@@ -522,10 +528,14 @@ export default function AyurvedicDoctorLocator() {
 
   const renderUserProfile = () => (
     <div className="max-w-4xl mx-auto space-y-8">
+      <Button variant="ghost" onClick={() => setCurrentPage('home')}>
+        <ChevronLeft className="mr-2 h-3 w-2" />
+        Home
+      </Button>
       <h2 className="text-2xl font-bold">User Profile</h2>
       <Tabs defaultValue="personal-info" className="w-full">
-        <TabsList className="flex flex-wrap w-full">
-          <TabsTrigger value="personal-info">User Info</TabsTrigger>
+      <TabsList className="flex flex-wrap w-full">
+          <TabsTrigger value="personal-info">user info</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="favorite-doctors">Favorite Doctors</TabsTrigger>
         </TabsList>
@@ -632,7 +642,7 @@ export default function AyurvedicDoctorLocator() {
   return (
     <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayurvedic Doctor Locator</h1>
+        <h1 className="text-4xl sm:text-xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur-Find</h1>
         <div className="flex items-center space-x-4">
           <Button variant="ghost" onClick={() => setCurrentPage('userProfile')}>
             <User className="mr-2 h-4 w-4" />
