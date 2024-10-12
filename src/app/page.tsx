@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast, useToast } from "@/hooks/use-toast"
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +26,10 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { db } from '@/lib/firebase'
+import { auth, db } from '@/lib/firebase'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -86,13 +90,23 @@ export default function AyurvedicDoctorLocator() {
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const router = useRouter()
 
   useEffect(() => {
     setMounted(true)
-    fetchData()
-  }, [])
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        fetchData(user.uid)
+      } else {
+        router.push('/auth')
+      }
+    })
 
-  const fetchData = async () => {
+    return () => unsubscribe()
+  }, [router])
+
+
+  const fetchData = async (uid: string) => {
     try {
       const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
       const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
@@ -153,8 +167,26 @@ export default function AyurvedicDoctorLocator() {
       console.error("Error updating user profile:", error)
     }
   }
+  const handleLogout = async () => {
+    try {
+      await signOut(auth)
+      router.push('/auth')
+      toast({
+        title: "Logged out",
+        description: "You have been logged out successfully.",
+      })
+    } catch (error) {
+      console.error("Error signing out:", error)
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
-  const popularLocations = ['Udupi', 'Kundapura', 'Karkala', 'Hebri']
+
+  const popularLocations = ['Udupi Taluk', 'Kundapura', 'Karkala', 'Hebri']
   const popularSpecializations = ['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine']
 
   const filteredDoctors = doctors.filter(doctor => 
@@ -246,10 +278,10 @@ export default function AyurvedicDoctorLocator() {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <Button variant="ghost" onClick={() => setCurrentPage('home')}>
-          <ChevronLeft className="mr-1 h-4 w-2" />
-          Home
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back to Home
         </Button>
-        <h2 className="text-1xl font-bold">Ayurvedic Doctors</h2>
+        <h2 className="text-2xl font-bold">Ayurvedic Doctors</h2>
       </div>
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap gap-2">
@@ -529,13 +561,13 @@ export default function AyurvedicDoctorLocator() {
   const renderUserProfile = () => (
     <div className="max-w-4xl mx-auto space-y-8">
       <Button variant="ghost" onClick={() => setCurrentPage('home')}>
-        <ChevronLeft className="mr-2 h-3 w-2" />
-        Home
+        <ChevronLeft className="mr-2 h-4 w-4" />
+        Back to Home
       </Button>
       <h2 className="text-2xl font-bold">User Profile</h2>
       <Tabs defaultValue="personal-info" className="w-full">
-      <TabsList className="flex flex-wrap w-full">
-          <TabsTrigger value="personal-info">user info</TabsTrigger>
+        <TabsList className="flex flex-wrap w-full">
+          <TabsTrigger value="personal-info">User Info</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="favorite-doctors">Favorite Doctors</TabsTrigger>
         </TabsList>
@@ -642,12 +674,24 @@ export default function AyurvedicDoctorLocator() {
   return (
     <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-4xl sm:text-xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur-Find</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayurvedic Doctor Locator</h1>
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => setCurrentPage('userProfile')}>
-            <User className="mr-2 h-4 w-4" />
-            Profile
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setCurrentPage('userProfile')}>
+                View Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon">
