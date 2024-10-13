@@ -1,786 +1,166 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
-import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag, Loader2 } from 'lucide-react'
-import { useTheme } from "next-themes"
-import { Input } from "@/components/ui/input"
+import { motion, useViewportScroll, useTransform, useSpring } from 'framer-motion'
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { auth, db } from '@/lib/firebase'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
-import { toast, useToast } from "@/hooks/use-toast"
+import Link from 'next/link'
+import { Leaf, Search, Calendar, Star, ArrowRight, Users, Shield } from 'lucide-react'
 
-const MapComponent = dynamic(() => import('@/components/MapComponent'), {
-  ssr: false,
-  loading: () => <p>Loading map...</p>
-})
-
-interface Doctor {
-  id: string;
-  name: string;
-  specialization: string;
-  location: string;
-  rating: number;
-  lat: number;
-  lng: number;
-  experience: number;
-  tags: string[];
-  about: string;
-  services: string[];
-  education: string;
-  availability: {
-    [key: string]: {
-      isAvailable: boolean;
-      times: string;
-    };
-  };
-}
-
-interface Appointment {
-  id: string;
-  userId: string;
-  doctorName: string;
-  date: string;
-  time: string;
-  patientName: string;
-  email: string;
-  phone: string;
-  reason: string;
-}
-
-interface UserProfile {
-  id: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  favoriteDoctors: string[];
-}
-
-export default function AyurvedicDoctorLocator() {
-  const [currentPage, setCurrentPage] = useState('home')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
-  const [doctors, setDoctors] = useState<Doctor[]>([])
-  const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+export default function LandingPage() {
   const [mounted, setMounted] = useState(false)
-  const [loading, 
- setLoading] = useState(true)
-  const { theme, setTheme } = useTheme()
-  const [sortOption, setSortOption] = useState('rating')
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const router = useRouter()
+  const { scrollYProgress } = useViewportScroll()
+  const yRange = useSpring(useTransform(scrollYProgress, [0, 1], [0, 100]), { stiffness: 100, damping: 20 })
 
   useEffect(() => {
     setMounted(true)
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        fetchUserData(user.uid)
-      } else {
-        router.push('/auth')
-      }
-    })
+  }, [])
 
-    return () => unsubscribe()
-  }, [router])
+  if (!mounted) return null
 
-  const fetchUserData = async (userId: string) => {
-    setLoading(true)
-    try {
-      const userProfileDoc = await getDoc(doc(db, 'userProfiles', userId))
-      if (userProfileDoc.exists()) {
-        const userProfileData = userProfileDoc.data() as UserProfile
-        setUserProfile({ ...userProfileData, id: userId })
-      } else {
-        // Create a new user profile if it doesn't exist
-        const newUserProfile: UserProfile = {
-          id: userId,
-          fullName: auth.currentUser?.displayName || '',
-          email: auth.currentUser?.email || '',
-          phone: auth.currentUser?.phoneNumber || '',
-          favoriteDoctors: []
-        }
-        await setDoc(doc(db, 'userProfiles', userId), newUserProfile)
-        setUserProfile(newUserProfile)
-      }
-
-      // Fetch user-specific appointments
-      const appointmentsQuery = query(collection(db, 'appointments'), where('userId', '==', userId))
-      const appointmentsSnapshot = await getDocs(appointmentsQuery)
-      const appointmentsData = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
-      setAppointments(appointmentsData)
-
-      // Fetch all doctors
-      const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
-      const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
-      setDoctors(doctorsData)
-    } catch (error) {
-      console.error("Error fetching user data:", error)
-      toast({
-        title: "Error",
-        description: "Failed to fetch user data. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const toggleFavorite = async (doctor: Doctor) => {
-    if (!userProfile) return
-
-    try {
-      const updatedFavorites = userProfile.favoriteDoctors.includes(doctor.id)
-        ? userProfile.favoriteDoctors.filter(id => id !== doctor.id)
-        : [...userProfile.favoriteDoctors, doctor.id]
-
-      await updateDoc(doc(db, 'userProfiles', userProfile.id), {
-        favoriteDoctors: updatedFavorites
-      })
-
-      setUserProfile(prev => prev ? {
-        ...prev,
-        favoriteDoctors: updatedFavorites
-      } : null)
-
-      toast({
-        title: userProfile.favoriteDoctors.includes(doctor.id) ? "Removed from favorites" : "Added to favorites",
-        description: `${doctor.name} has been ${userProfile.favoriteDoctors.includes(doctor.id) ? "removed from" : "added to"} your favorites.`,
-      })
-    } catch (error) {
-      console.error("Error toggling favorite:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update favorites. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const addAppointment = async (appointment: Omit<Appointment, 'id' | 'userId'>) => {
-    if (!userProfile) return
-
-    try {
-      const newAppointment = {
-        ...appointment,
-        userId: userProfile.id
-      }
-      const docRef = await addDoc(collection(db, 'appointments'), newAppointment)
-      setAppointments([...appointments, { id: docRef.id, ...newAppointment }])
-      toast({
-        title: "Appointment Booked",
-        description: "Your appointment has been successfully booked.",
-      })
-    } catch (error) {
-      console.error("Error adding appointment:", error)
-      toast({
-        title: "Error",
-        description: "Failed to book appointment. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const updateUserProfile = async (newProfile: Omit<UserProfile, 'id' | 'favoriteDoctors'>) => {
-    if (!userProfile) return
-
-    try {
-      await updateDoc(doc(db, 'userProfiles', userProfile.id), newProfile)
-      setUserProfile(prev => prev ? { ...prev, ...newProfile } : null)
-      toast({
-        title: "Profile Updated",
-        description: "Your profile has been successfully updated.",
-      })
-    } catch (error) {
-      console.error("Error updating user profile:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth)
-      setUserProfile(null)
-      router.push('/auth')
-    } catch (error) {
-      console.error("Error signing out:", error)
-      toast({
-        title: "Error",
-        description: "Failed to sign out. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const renderHomePage = () => (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row items-center gap-4">
-        <Input
-          type="text"
-          placeholder="Search doctors, locations, or specializations"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full"
-          aria-label="Search for Ayurvedic doctors"
-        />
-        <Button onClick={() => setCurrentPage('doctorListing')} className="w-full sm:w-auto">
-          <Search className="mr-2" />
-          Search
-        </Button>
-      </div>
-
-      <div className="flex justify-center">
-        <Button 
-          onClick={() => {
-            setSearchQuery('')
-            setCurrentPage('doctorListing')
-          }} 
-          variant="outline"
-          className="w-full sm:w-auto"
-        >
-          View All Doctors
-        </Button>
-      </div>
-
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Quick Filters</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <h3 className="text-lg font-medium mb-2">Popular Locations</h3>
-            <div className="flex flex-wrap gap-2">
-              {['Udupi', 'Kundapura', 'Karkala', 'Hebri'].map((location) => (
-                <Button key={location} variant="outline" size="sm" onClick={() => {
-                  setSearchQuery(location)
-                  setCurrentPage('doctorListing')
-                }}>
-                  <MapPin className="mr-2 h-4 w-4" />
-                  {location}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-lg font-medium mb-2">Popular Specializations</h3>
-            <div className="flex flex-wrap gap-2">
-              {['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine'].map((specialization) => (
-                <Button key={specialization} variant="outline" size="sm" onClick={() => {
-                  setSearchQuery(specialization)
-                  setCurrentPage('doctorListing')
-                }}>
-                  {specialization}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Ayurvedic Doctors Near You</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0" style={{ height: '400px' }}>
-          <MapComponent center={[13.3409, 74.7421]} zoom={10} markers={doctors} />
-        </CardContent>
-      </Card>
-    </div>
-  )
-
-  const renderDoctorListing = () => (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <Button variant="ghost" onClick={() => setCurrentPage('home')}>
-          <ChevronLeft className="mr-2 h-3 w-2" />
-          Back to Home
-        </Button>
-        <h2 className="text-2xl font-bold">Ayurvedic Doctors</h2>
-      </div>
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex flex-wrap gap-2">
-          <Select value={sortOption} onValueChange={setSortOption}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="rating">Highest Rated</SelectItem>
-              <SelectItem value="experience">Most Experienced</SelectItem>
-              <SelectItem value="name">Name (A-Z)</SelectItem>
-            </SelectContent>
-          </Select>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Tag className="mr-2 h-4 w-4" />
-                Filter Tags
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {Array.from(new Set(doctors.flatMap(d => d.tags))).map(tag => (
-                <DropdownMenuItem key={tag} onClick={() => setSelectedTags(prev => 
-                  prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                )}>
-                  <input
-                    type="checkbox"
-                    checked={selectedTags.includes(tag)}
-                    onChange={() => {}}
-                    className="mr-2"
-                  />
-                  {tag}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {doctors.filter(doctor => 
-          searchQuery === '' || // Show all doctors when searchQuery is empty
-          (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
-          (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
-        ).sort((a, b) => {
-          switch (sortOption) {
-            case 'rating':
-              return b.rating - a.rating
-            case 'experience':
-              return b.experience - a.experience
-            case 'name':
-              return a.name.localeCompare(b.name)
-            default:
-              return 0
-          }
-        }).map((doctor) => (
-          <Card key={doctor.id} className="cursor-pointer hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>{doctor.name}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleFavorite(doctor)
-                  }}
-                >
-                  <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
-                </Button>
-              </CardTitle>
-              <CardDescription>{doctor.specialization}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  <span>{doctor.location}</span>
-                </div>
-                <div className="flex items-center">
-                  <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                  <span>{doctor.rating}</span>
-                </div>
-              </div>
-              <div className="mb-2">
-                <Clock className="h-4 w-4 inline mr-2" />
-                <span>{doctor.experience} years experience</span>
-              </div>
-              <div className="flex flex-wrap gap-1 mb-4">
-                {doctor.tags.map(tag => (
-                  <Badge key={tag} variant="secondary">{tag}</Badge>
-                ))}
-              </div>
-              <Button className="w-full" onClick={() => {
-                setSelectedDoctor(doctor)
-                setCurrentPage('doctorProfile')
-              }}>
-                View Profile
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-
-  const renderDoctorProfile = () => (
-    <div className="space-y-8">
-      <Button variant="ghost" onClick={() => setCurrentPage('doctorListing')}>
-        <ChevronLeft className="mr-2 h-4 w-4" />
-        Back to Listings
-      </Button>
-      <div className="flex flex-col lg:flex-row gap-8">
-        <div className="w-full lg:w-2/3 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>{selectedDoctor?.name}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => selectedDoctor && toggleFavorite(selectedDoctor)}
-                >
-                  {selectedDoctor && (
-                    <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(selectedDoctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
-                  )}
-                </Button>
-              </CardTitle>
-              {selectedDoctor && <CardDescription>{selectedDoctor.specialization}</CardDescription>}
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center">
-                  <MapPin className="h-5 w-5 mr-2" />
-                  <span>{selectedDoctor?.location}</span>
-                </div>
-                <div className="flex items-center">
-                  <Star  className="h-5 w-5 text-yellow-400 mr-2" />
-                  <span>{selectedDoctor?.rating} (50 reviews)</span>
-                </div>
-                <div className="flex items-center">
-                  <Clock className="h-5 w-5 mr-2" />
-                  <span>{selectedDoctor?.experience} + years of experience</span>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Availability</h3>
-                  {selectedDoctor?.availability && Object.entries(selectedDoctor.availability).map(([day, hours]) => (
-                    <div key={day} className="flex justify-between">
-                      <span>{day}</span>
-                      <span>{hours.times}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center">
-                  <Phone className="h-5 w-5 mr-2" />
-                  <span>+91 1234567890</span>
-                </div>
-                <div className="flex items-center">
-                  <Mail className="h-5 w-5 mr-2" />
-                  <span>{selectedDoctor?.name.toLowerCase().replace(' ', '.')}@example.com</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>About {selectedDoctor?.name}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>{selectedDoctor?.about}</p>
-              <div className="mt-4">
-                <h3 className="font-semibold mb-2">Education</h3>
-                <p>{selectedDoctor?.education}</p>
-              </div>
-              <div className="mt-4">
-                <h3 className="font-semibold mb-2">Specializations</h3>
-                <div className="flex flex-wrap gap-2">
-                  {selectedDoctor?.tags.map(tag => (
-                    <Badge key={tag}>{tag}</Badge>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Services Offered</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="list-disc list-inside space-y-2">
-                {selectedDoctor?.services.map(service => (
-                  <li key={service}>{service}</li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        </div>
-        <div className="w-full lg:w-1/3 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Book an Appointment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full" onClick={() => setCurrentPage('appointmentBooking')}>Book Now</Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Location</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0" style={{ height: '200px' }}>
-              {selectedDoctor && (
-                <MapComponent 
-                  center={[selectedDoctor.lat, selectedDoctor.lng]} 
-                  zoom={14} 
-                  markers={[selectedDoctor]} 
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderAppointmentBooking = () => (
-    <div className="max-w-md mx-auto space-y-8">
-      <Button variant="ghost" onClick={() => setCurrentPage('doctorProfile')}>
-        <ChevronLeft className="mr-2 h-4 w-4" />
-        Back to Doctor Profile
-      </Button>
-      <Card>
-        <CardHeader>
-          <CardTitle>Book an Appointment with {selectedDoctor?.name}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={(e) => {
-            e.preventDefault()
-            const formData = new FormData(e.target as HTMLFormElement)
-            const appointment: Omit<Appointment, 'id' | 'userId'> = {
-              doctorName: selectedDoctor?.name || '',
-              date: formData.get('date') as string,
-              time: formData.get('time') as string,
-              patientName: formData.get('name') as string,
-              email: formData.get('email') as string,
-              phone: formData.get('phone') as string,
-              reason: formData.get('reason') as string
-            }
-            addAppointment(appointment)
-            setCurrentPage('userProfile')
-          }}>
-            <div>
-              <Label htmlFor="date">Date</Label>
-              <Input id="date" name="date" type="date" required />
-            </div>
-            <div>
-              <Label htmlFor="time">Time</Label>
-              <Select name="time" required>
-                <SelectTrigger id="time">
-                  <SelectValue placeholder="Select a time slot" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="09:00">09:00 AM</SelectItem>
-                  <SelectItem value="10:00">10:00 AM</SelectItem>
-                  <SelectItem value="11:00">11:00 AM</SelectItem>
-                  <SelectItem value="12:00">12:00 PM</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" name="name" placeholder="Enter your full name" required defaultValue={userProfile?.fullName} />
-            </div>
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="Enter your email" required defaultValue={userProfile?.email} />
-            </div>
-            <div>
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" name="phone" type="tel" placeholder="Enter your phone number" required defaultValue={userProfile?.phone} />
-            </div>
-            <div>
-              <Label htmlFor="reason">Reason for Visit</Label>
-              <Textarea id="reason" name="reason" placeholder="Briefly describe your reason for the appointment" required />
-            </div>
-            <Button type="submit" className="w-full">Confirm Booking</Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  )
-
-  const renderUserProfile = () => (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <Button variant="ghost" onClick={() => setCurrentPage('home')}>
-        <ChevronLeft className="mr-2 h-3 w-2" />
-        Back to Home
-      </Button>
-      <h2 className="text-2xl font-bold">User Profile</h2>
-      <Tabs defaultValue="personal-info" className="w-full">
-        <TabsList className="flex flex-wrap w-full">
-          <TabsTrigger value="personal-info">User Info</TabsTrigger>
-          <TabsTrigger value="appointments">Appointments</TabsTrigger>
-          <TabsTrigger value="favorite-doctors">Favorite Doctors</TabsTrigger>
-        </TabsList>
-        <TabsContent value="personal-info">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={(e) => {
-                e.preventDefault()
-                const formData = new FormData(e.target as HTMLFormElement)
-                const newProfile = {
-                  fullName: formData.get('fullName') as string,
-                  email: formData.get('email') as string,
-                  phone: formData.get('phone') as string,
-                }
-                updateUserProfile(newProfile)
-              }}>
-                <div>
-                  <Label htmlFor="full-name">Full Name</Label>
-                  <Input id="full-name" name="fullName" defaultValue={userProfile?.fullName} />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" defaultValue={userProfile?.email} />
-                </div>
-                <div>
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" name="phone" type="tel" defaultValue={userProfile?.phone} />
-                </div>
-                <Button type="submit">Update Profile</Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="appointments">
-          <Card>
-            <CardHeader>
-              <CardTitle>Upcoming Appointments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {appointments.map((appointment) => (
-                  <Card key={appointment.id}>
-                    <CardHeader>
-                      <CardTitle>{appointment.doctorName}</CardTitle>
-                      <CardDescription>{appointment.date}, {appointment.time}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="mb-2">Reason: {appointment.reason}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="outline">Reschedule</Button>
-                        <Button variant="destructive" onClick={async () => {
-                          await deleteDoc(doc(db, 'appointments', appointment.id))
-                          setAppointments(appointments.filter(a => a.id !== appointment.id))
-                        }}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="favorite-doctors">
-          <Card>
-            <CardHeader>
-              <CardTitle>Favorite Doctors</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {doctors.filter(doctor => userProfile?.favoriteDoctors.includes(doctor.id)).map((doctor) => (
-                  <Card key={doctor.id}>
-                    <CardHeader>
-                      <CardTitle>{doctor.name}</CardTitle>
-                      <CardDescription>{doctor.specialization}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div className="flex items-center">
-                          <MapPin className="h-4 w-4 mr-2" />
-                          <span>{doctor.location}</span>
-                        </div>
-                        <Button variant="outline" onClick={() => {
-                          setSelectedDoctor(doctor)
-                          setCurrentPage('doctorProfile')
-                        }}>View Profile</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
-  )
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
   }
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen">
-      <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur - Find</h1>
-        <div className="flex items-center space-x-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost">
-                <User className="mr-2 h-4 w-4" />
-                {userProfile?.fullName || 'Profile'}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setCurrentPage('userProfile')}>
-                View Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleLogout}>
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                {theme === 'dark' ? <Sun className="h-[1.2rem] w-[1.2rem]" /> : <Moon className="h-[1.2rem] w-[1.2rem]" />}
-                <span className="sr-only">Toggle theme</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setTheme("light")}>
-                Light
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("dark")}>
-                Dark
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("system")}>
-                System
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-      
-      <main>
-        {currentPage === 'home' && renderHomePage()}
-        {currentPage === 'doctorListing' && renderDoctorListing()}
-        {currentPage === 'doctorProfile' && renderDoctorProfile()}
-        {currentPage === 'appointmentBooking' && renderAppointmentBooking()}
-        {currentPage === 'userProfile' && renderUserProfile()}
-      </main>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-green-100 to-green-200 dark:from-green-900 dark:via-green-800 dark:to-green-700 overflow-hidden">
+      <motion.div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, rgba(52,211,153,0.1) 0%, rgba(52,211,153,0) 70%)",
+          transform: yRange.get() ? `translate3d(0, ${yRange.get()}px, 0)` : 'none'
+        }}
+      />
+      <div className="container mx-auto px-4 py-16 relative">
+        <motion.header 
+          className="text-center mb-16"
+          initial="hidden"
+          animate="visible"
+          variants={fadeInUp}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        >
+          <motion.h1 
+            className="text-5xl md:text-7xl font-bold text-green-800 dark:text-green-100 mb-6"
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 5, repeat: Infinity, repeatType: "reverse" }}
+          >
+            Discover Ayurveda with Ayur-Find
+          </motion.h1>
+          <motion.p 
+            className="text-xl md:text-2xl text-green-700 dark:text-green-200 max-w-3xl mx-auto"
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 3, repeat: Infinity, repeatType: "reverse" }}
+          >
+            Your journey to holistic wellness begins here
+          </motion.p>
+        </motion.header>
+
+        <motion.div 
+          className="flex flex-col items-center justify-center gap-8 mb-16"
+          variants={fadeInUp}
+          initial="hidden"
+          animate="visible"
+          transition={{ delay: 0.2, duration: 0.8 }}
+        >
+          <motion.div 
+            className="w-64 h-64 rounded-full bg-gradient-to-r from-green-300 to-green-500 dark:from-green-600 dark:to-green-400"
+            animate={{ 
+              scale: [1, 1.1, 1],
+              rotate: [0, 360],
+              borderRadius: ["50%", "40%", "50%"]
+            }}
+            transition={{ duration: 10, repeat: Infinity, repeatType: "reverse" }}
+          />
+          <Link href="/auth" passHref>
+            <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white text-lg px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300">
+              Start Your Wellness Journey
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </Link>
+        </motion.div>
+
+        <motion.div 
+          className="grid md:grid-cols-3 gap-8 mb-16"
+          variants={fadeInUp}
+          initial="hidden"
+          animate="visible"
+          transition={{ delay: 0.4, duration: 0.8, staggerChildren: 0.2 }}
+        >
+          {[
+            { icon: Search, title: "Find Experts", description: "Discover Ayurvedic practitioners near you" },
+            { icon: Calendar, title: "Easy Booking", description: "Schedule consultations with a few clicks" },
+            { icon: Star, title: "Verified Reviews", description: "Read authentic patient experiences" }
+          ].map((feature, index) => (
+            <motion.div 
+              key={index}
+              className="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm rounded-lg p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <feature.icon className="h-12 w-12 text-green-600 dark:text-green-400 mb-4" />
+              <h3 className="text-xl font-semibold mb-2 text-green-800 dark:text-green-200">{feature.title}</h3>
+              <p className="text-green-700 dark:text-green-300">{feature.description}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+
+        <motion.div 
+          className="text-center mb-16"
+          variants={fadeInUp}
+          initial="hidden"
+          animate="visible"
+          transition={{ delay: 0.6, duration: 0.8 }}
+        >
+          <h2 className="text-3xl font-semibold text-green-800 dark:text-green-100 mb-8">
+            Why Choose Ayur-Find?
+          </h2>
+          <motion.div 
+            className="grid md:grid-cols-3 gap-8"
+            variants={fadeInUp}
+            initial="hidden"
+            animate="visible"
+            transition={{ delay: 0.8, duration: 0.8, staggerChildren: 0.2 }}
+          >
+            {[
+              { icon: Users, title: "Expert Network", description: "Access qualified Ayurvedic doctors" },
+              { icon: Leaf, title: "Holistic Healing", description: "Experience natural, whole-body treatments" },
+              { icon: Shield, title: "Secure Platform", description: "Your health data is protected" }
+            ].map((reason, index) => (
+              <motion.div 
+                key={index} 
+                className="flex flex-col items-center"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <reason.icon className="h-16 w-16 text-green-600 dark:text-green-400 mb-4" />
+                <h3 className="text-xl font-semibold mb-2 text-green-800 dark:text-green-200">{reason.title}</h3>
+                <p className="text-green-700 dark:text-green-300">{reason.description}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </motion.div>
+
+        <motion.div 
+          className="text-center"
+          variants={fadeInUp}
+          initial="hidden"
+          animate="visible"
+          transition={{ delay: 1, duration: 0.8 }}
+        >
+          <h2 className="text-3xl font-semibold text-green-800 dark:text-green-100 mb-4">
+            Ready to Embrace Ayurveda?
+          </h2>
+          <p className="text-lg text-green-700 dark:text-green-200 mb-6 max-w-2xl mx-auto">
+            Join Ayur-Find today and take the first step towards a balanced, healthier you.
+          </p>
+          <Link href="/auth" passHref>
+            <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white text-lg px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300">
+              Get Started Now
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </Link>
+        </motion.div>
+      </div>
     </div>
   )
 }

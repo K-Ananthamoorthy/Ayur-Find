@@ -11,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { auth, db } from '@/lib/firebase'
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
-import { toast, useToast } from "@/hooks/use-toast"
+import { toast } from "@/hooks/use-toast"
 import { Loader2, AlertCircle, LogIn } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 
@@ -29,7 +29,7 @@ export default function AuthPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        router.push('/')
+        router.push('/main')
       } else {
         setIsAuthenticating(false)
       }
@@ -76,6 +76,7 @@ export default function AuthPage() {
           description: "You have been logged in successfully.",
         })
       }
+      router.push('/main')
     } catch (error) {
       console.error("Authentication error:", error)
       setAuthError("An error occurred during authentication. Please try again.")
@@ -92,11 +93,9 @@ export default function AuthPage() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
   
-      // Check if the user profile already exists
       const userProfileDoc = await getDoc(doc(db, 'userProfiles', user.uid));
   
       if (!userProfileDoc.exists()) {
-        // Create a new user profile if it doesn't exist
         await setDoc(doc(db, 'userProfiles', user.uid), {
           fullName: user.displayName || '',
           email: user.email || '',
@@ -109,6 +108,7 @@ export default function AuthPage() {
         title: "Logged in",
         description: "You have been logged in successfully with Google.",
       });
+      router.push('/main')
     } catch (error) {
       if ((error as FirebaseError).code === 'auth/popup-closed-by-user') {
         setAuthError("Google sign-in was canceled. Please try again.");
@@ -120,7 +120,6 @@ export default function AuthPage() {
       setIsLoading(false);
     }
   };
-  
 
   const handleForgotPassword = async () => {
     if (!email) {
