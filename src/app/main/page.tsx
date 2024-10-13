@@ -28,8 +28,9 @@ import { Badge } from "@/components/ui/badge"
 import { auth, db } from '@/lib/firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
-import { toast, useToast } from "@/hooks/use-toast"
+import { toast } from "@/hooks/use-toast"
 
+// Import the updated MapComponent
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
   loading: () => <p>Loading map...</p>
@@ -84,8 +85,7 @@ export default function AyurvedicDoctorLocator() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [mounted, setMounted] = useState(false)
-  const [loading, 
- setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -387,7 +387,7 @@ export default function AyurvedicDoctorLocator() {
                     toggleFavorite(doctor)
                   }}
                 >
-                  <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+                  <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(doctor.id) ? 'text-yellow-400  fill-yellow-400' : 'text-muted-foreground'}`} />
                 </Button>
               </CardTitle>
               <CardDescription>{doctor.specialization}</CardDescription>

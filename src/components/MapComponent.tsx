@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
 interface Doctor {
   id: string;
@@ -35,17 +38,25 @@ const MapComponent = ({ center, zoom, markers, onMarkerClick }: MapProps) => {
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(mapRef.current)
+
+        // Fix Leaflet icon issue
+        // No need to delete _getIconUrl property
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: markerIcon2x.src,
+          iconUrl: markerIcon.src,
+          shadowUrl: markerShadow.src,
+        })
       } else {
         mapRef.current.setView(center, zoom)
       }
 
-      // Custom icon for markers
-      const customIcon = L.icon({
-        iconUrl: '/marker-icon.png',
+      const customIcon = new L.Icon({
+        iconUrl: markerIcon.src,
+        iconRetinaUrl: markerIcon2x.src,
+        shadowUrl: markerShadow.src,
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],
-        shadowUrl: '/marker-shadow.png',
         shadowSize: [41, 41]
       })
 
