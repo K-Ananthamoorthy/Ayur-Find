@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { db, storage } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -265,23 +264,7 @@ export default function AdminPanel() {
       const worksheet = workbook.Sheets[sheetName]
       const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-      type ExcelRow = {
-        Name: string
-        Email: string
-        Phone: string
-        Specialization: string
-        Location: string
-        Rating: string
-        Latitude: string
-        Longitude: string
-        Experience: string
-        Tags: string
-        About: string
-        Services: string
-        Education: string
-      }
-
-      for (const row of jsonData as ExcelRow[]) {
+      for (const row of jsonData as any[]) {
         const doctor: Omit<Doctor, 'id'> = {
           name: row.Name || '',
           email: row.Email || '',
@@ -292,9 +275,9 @@ export default function AdminPanel() {
           lat: parseFloat(row.Latitude) || 0,
           lng: parseFloat(row.Longitude) || 0,
           experience: parseInt(row.Experience) || 0,
-          tags: (row.Tags || '').split(',').map(tag => tag.trim()),
+          tags: (row.Tags || '').split(',').map((tag: string) => tag.trim()),
           about: row.About || '',
-          services: (row.Services || '').split(',').map(service => service.trim()),
+          services: (row.Services || '').split(',').map((service: string) => service.trim()),
           education: row.Education || '',
           availability: {
             Monday: { isAvailable: false, times: '' },
@@ -381,7 +364,6 @@ export default function AdminPanel() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Doctor</TableHead>
-                
                       <TableHead>Patient</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Time</TableHead>
@@ -390,6 +372,7 @@ export default function AdminPanel() {
                   <TableBody>
                     {appointments.slice(0, 5).map((appointment) => (
                       <TableRow key={appointment.id}>
+                        
                         <TableCell>{appointment.doctorName}</TableCell>
                         <TableCell>{appointment.patientName}</TableCell>
                         <TableCell>{appointment.date}</TableCell>

@@ -225,7 +225,7 @@ export default function AyurvedicDoctorLocator() {
     try {
       await signOut(auth)
       setUserProfile(null)
-      router.push('/auth')
+      router.push('/')
     } catch (error) {
       console.error("Error signing out:", error)
       toast({
@@ -734,7 +734,7 @@ export default function AyurvedicDoctorLocator() {
   return (
     <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur - Find</h1>
+        <h1 className="text-5xl sm:text-5xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur-Find</h1>
         <div className="flex items-center space-x-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
