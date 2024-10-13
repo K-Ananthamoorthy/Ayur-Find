@@ -84,7 +84,8 @@ export default function AyurvedicDoctorLocator() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [mounted, setMounted] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, 
+ setLoading] = useState(true)
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -114,9 +115,9 @@ export default function AyurvedicDoctorLocator() {
         // Create a new user profile if it doesn't exist
         const newUserProfile: UserProfile = {
           id: userId,
-          fullName: '',
+          fullName: auth.currentUser?.displayName || '',
           email: auth.currentUser?.email || '',
-          phone: '',
+          phone: auth.currentUser?.phoneNumber || '',
           favoriteDoctors: []
         }
         await setDoc(doc(db, 'userProfiles', userId), newUserProfile)
@@ -252,13 +253,26 @@ export default function AyurvedicDoctorLocator() {
         </Button>
       </div>
 
+      <div className="flex justify-center">
+        <Button 
+          onClick={() => {
+            setSearchQuery('')
+            setCurrentPage('doctorListing')
+          }} 
+          variant="outline"
+          className="w-full sm:w-auto"
+        >
+          View All Doctors
+        </Button>
+      </div>
+
       <div>
         <h2 className="text-xl font-semibold mb-4">Quick Filters</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <h3 className="text-lg font-medium mb-2">Popular Locations</h3>
             <div className="flex flex-wrap gap-2">
-              {['Udupi Taluk', 'Kundapura', 'Karkala', 'Hebri'].map((location) => (
+              {['Udupi', 'Kundapura', 'Karkala', 'Hebri'].map((location) => (
                 <Button key={location} variant="outline" size="sm" onClick={() => {
                   setSearchQuery(location)
                   setCurrentPage('doctorListing')
@@ -344,6 +358,7 @@ export default function AyurvedicDoctorLocator() {
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {doctors.filter(doctor => 
+          searchQuery === '' || // Show all doctors when searchQuery is empty
           (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
           doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
@@ -387,7 +402,6 @@ export default function AyurvedicDoctorLocator() {
                   <Star className="h-4 w-4 text-yellow-400 mr-1" />
                   <span>{doctor.rating}</span>
                 </div>
-              
               </div>
               <div className="mb-2">
                 <Clock className="h-4 w-4 inline mr-2" />
@@ -454,7 +468,7 @@ export default function AyurvedicDoctorLocator() {
                   {selectedDoctor?.availability && Object.entries(selectedDoctor.availability).map(([day, hours]) => (
                     <div key={day} className="flex justify-between">
                       <span>{day}</span>
-                      <span>{hours.times}</span> {/* Updated to access 'times' property */}
+                      <span>{hours.times}</span>
                     </div>
                   ))}
                 </div>
@@ -762,8 +776,7 @@ export default function AyurvedicDoctorLocator() {
       
       <main>
         {currentPage === 'home' && renderHomePage()}
-        {currentPage ===
- 'doctorListing' && renderDoctorListing()}
+        {currentPage === 'doctorListing' && renderDoctorListing()}
         {currentPage === 'doctorProfile' && renderDoctorProfile()}
         {currentPage === 'appointmentBooking' && renderAppointmentBooking()}
         {currentPage === 'userProfile' && renderUserProfile()}
