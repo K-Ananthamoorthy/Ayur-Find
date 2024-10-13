@@ -108,14 +108,18 @@ export default function AuthPage() {
         title: "Logged in",
         description: "You have been logged in successfully with Google.",
       });
-      router.push('/main')
+      router.push('/main');
     } catch (error) {
-      if ((error as FirebaseError).code === 'auth/popup-closed-by-user') {
-        setAuthError("Google sign-in was canceled. Please try again.");
-      } else {
-        setAuthError("An error occurred during Google sign-in. Please try again.");
-      }
       console.error("Google sign-in error:", error);
+      if (error instanceof FirebaseError) {
+        if (error.code === 'auth/popup-closed-by-user') {
+          setAuthError("Google sign-in was canceled. Please try again.");
+        } else {
+          setAuthError(`An error occurred during Google sign-in: ${error.message}`);
+        }
+      } else {
+        setAuthError("An unexpected error occurred during Google sign-in. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -284,8 +288,8 @@ export default function AuthPage() {
               </div>
             </div>
             <Button variant="outline" className="w-full mt-4" onClick={handleGoogleSignIn} disabled={isLoading}>
-              <LogIn className="mr-2 h-4 w-4" />
-              Google
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
+              {isLoading ? 'Signing in...' : 'Sign in with Google'}
             </Button>
           </div>
         </CardContent>
