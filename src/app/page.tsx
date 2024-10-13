@@ -1,15 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag } from 'lucide-react'
+import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag, Loader2 } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { toast, useToast } from "@/hooks/use-toast"
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,9 +26,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { auth, db } from '@/lib/firebase'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore'
-import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
+import { toast, useToast } from "@/hooks/use-toast"
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -50,12 +49,16 @@ interface Doctor {
   services: string[];
   education: string;
   availability: {
-    [key: string]: string;
+    [key: string]: {
+      isAvailable: boolean;
+      times: string;
+    };
   };
 }
 
 interface Appointment {
   id: string;
+  userId: string;
   doctorName: string;
   date: string;
   time: string;
@@ -79,14 +82,9 @@ export default function AyurvedicDoctorLocator() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    id: '',
-    fullName: '',
-    email: '',
-    phone: '',
-    favoriteDoctors: []
-  })
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -96,7 +94,7 @@ export default function AyurvedicDoctorLocator() {
     setMounted(true)
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        fetchData(user.uid)
+        fetchUserData(user.uid)
       } else {
         router.push('/auth')
       }
@@ -105,76 +103,128 @@ export default function AyurvedicDoctorLocator() {
     return () => unsubscribe()
   }, [router])
 
-
-  const fetchData = async (uid: string) => {
+  const fetchUserData = async (userId: string) => {
+    setLoading(true)
     try {
-      const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
-      const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
-      setDoctors(doctorsData)
+      const userProfileDoc = await getDoc(doc(db, 'userProfiles', userId))
+      if (userProfileDoc.exists()) {
+        const userProfileData = userProfileDoc.data() as UserProfile
+        setUserProfile({ ...userProfileData, id: userId })
+      } else {
+        // Create a new user profile if it doesn't exist
+        const newUserProfile: UserProfile = {
+          id: userId,
+          fullName: '',
+          email: auth.currentUser?.email || '',
+          phone: '',
+          favoriteDoctors: []
+        }
+        await setDoc(doc(db, 'userProfiles', userId), newUserProfile)
+        setUserProfile(newUserProfile)
+      }
 
-      const appointmentsSnapshot = await getDocs(collection(db, 'appointments'))
+      // Fetch user-specific appointments
+      const appointmentsQuery = query(collection(db, 'appointments'), where('userId', '==', userId))
+      const appointmentsSnapshot = await getDocs(appointmentsQuery)
       const appointmentsData = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
       setAppointments(appointmentsData)
 
-      const userProfileSnapshot = await getDocs(collection(db, 'userProfiles'))
-      if (!userProfileSnapshot.empty) {
-        const userProfileData = userProfileSnapshot.docs[0].data() as UserProfile
-        setUserProfile({ ...userProfileData, id: userProfileSnapshot.docs[0].id })
-      }
+      // Fetch all doctors
+      const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
+      const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
+      setDoctors(doctorsData)
     } catch (error) {
-      console.error("Error fetching data:", error)
+      console.error("Error fetching user data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch user data. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
   const toggleFavorite = async (doctor: Doctor) => {
+    if (!userProfile) return
+
     try {
-      const updatedFavorites = userProfile.favoriteDoctors?.includes(doctor.id)
+      const updatedFavorites = userProfile.favoriteDoctors.includes(doctor.id)
         ? userProfile.favoriteDoctors.filter(id => id !== doctor.id)
-        : [...(userProfile.favoriteDoctors || []), doctor.id]
+        : [...userProfile.favoriteDoctors, doctor.id]
 
       await updateDoc(doc(db, 'userProfiles', userProfile.id), {
         favoriteDoctors: updatedFavorites
       })
 
-      setUserProfile(prev => ({
+      setUserProfile(prev => prev ? {
         ...prev,
         favoriteDoctors: updatedFavorites
-      }))
+      } : null)
+
+      toast({
+        title: userProfile.favoriteDoctors.includes(doctor.id) ? "Removed from favorites" : "Added to favorites",
+        description: `${doctor.name} has been ${userProfile.favoriteDoctors.includes(doctor.id) ? "removed from" : "added to"} your favorites.`,
+      })
     } catch (error) {
       console.error("Error toggling favorite:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update favorites. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
-  const addAppointment = async (appointment: Omit<Appointment, 'id'>) => {
+  const addAppointment = async (appointment: Omit<Appointment, 'id' | 'userId'>) => {
+    if (!userProfile) return
+
     try {
-      const docRef = await addDoc(collection(db, 'appointments'), appointment)
-      setAppointments([...appointments, { id: docRef.id, ...appointment }])
+      const newAppointment = {
+        ...appointment,
+        userId: userProfile.id
+      }
+      const docRef = await addDoc(collection(db, 'appointments'), newAppointment)
+      setAppointments([...appointments, { id: docRef.id, ...newAppointment }])
+      toast({
+        title: "Appointment Booked",
+        description: "Your appointment has been successfully booked.",
+      })
     } catch (error) {
       console.error("Error adding appointment:", error)
+      toast({
+        title: "Error",
+        description: "Failed to book appointment. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
-  const updateUserProfile = async (newProfile: Omit<UserProfile, 'id'>) => {
+  const updateUserProfile = async (newProfile: Omit<UserProfile, 'id' | 'favoriteDoctors'>) => {
+    if (!userProfile) return
+
     try {
-      if (userProfile.id) {
-        await updateDoc(doc(db, 'userProfiles', userProfile.id), newProfile)
-        setUserProfile({ ...newProfile, id: userProfile.id })
-      } else {
-        const docRef = await addDoc(collection(db, 'userProfiles'), newProfile)
-        setUserProfile({ id: docRef.id, ...newProfile })
-      }
+      await updateDoc(doc(db, 'userProfiles', userProfile.id), newProfile)
+      setUserProfile(prev => prev ? { ...prev, ...newProfile } : null)
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been successfully updated.",
+      })
     } catch (error) {
       console.error("Error updating user profile:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update profile. Please try again.",
+        variant: "destructive",
+      })
     }
   }
+
   const handleLogout = async () => {
     try {
       await signOut(auth)
+      setUserProfile(null)
       router.push('/auth')
-      toast({
-        title: "Logged out",
-        description: "You have been logged out successfully.",
-      })
     } catch (error) {
       console.error("Error signing out:", error)
       toast({
@@ -183,34 +233,6 @@ export default function AyurvedicDoctorLocator() {
         variant: "destructive",
       })
     }
-  }
-
-
-  const popularLocations = ['Udupi', 'Kundapura', 'Karkala', 'Hebri']
-  const popularSpecializations = ['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine']
-
-  const filteredDoctors = doctors.filter(doctor => 
-    (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
-    (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
-  )
-
-  const sortedDoctors = [...filteredDoctors].sort((a, b) => {
-    switch (sortOption) {
-      case 'rating':
-        return b.rating - a.rating
-      case 'experience':
-        return b.experience - a.experience
-      case 'name':
-        return a.name.localeCompare(b.name)
-      default:
-        return 0
-    }
-  })
-
-  if (!mounted) {
-    return null
   }
 
   const renderHomePage = () => (
@@ -236,7 +258,7 @@ export default function AyurvedicDoctorLocator() {
           <div>
             <h3 className="text-lg font-medium mb-2">Popular Locations</h3>
             <div className="flex flex-wrap gap-2">
-              {popularLocations.map((location) => (
+              {['Udupi Taluk', 'Kundapura', 'Karkala', 'Hebri'].map((location) => (
                 <Button key={location} variant="outline" size="sm" onClick={() => {
                   setSearchQuery(location)
                   setCurrentPage('doctorListing')
@@ -250,7 +272,7 @@ export default function AyurvedicDoctorLocator() {
           <div>
             <h3 className="text-lg font-medium mb-2">Popular Specializations</h3>
             <div className="flex flex-wrap gap-2">
-              {popularSpecializations.map((specialization) => (
+              {['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine'].map((specialization) => (
                 <Button key={specialization} variant="outline" size="sm" onClick={() => {
                   setSearchQuery(specialization)
                   setCurrentPage('doctorListing')
@@ -278,8 +300,8 @@ export default function AyurvedicDoctorLocator() {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <Button variant="ghost" onClick={() => setCurrentPage('home')}>
-          <ChevronLeft className="mr-2 h-3 w-2" />
-          Home
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back to Home
         </Button>
         <h2 className="text-2xl font-bold">Ayurvedic Doctors</h2>
       </div>
@@ -321,7 +343,23 @@ export default function AyurvedicDoctorLocator() {
         </div>
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {sortedDoctors.map((doctor) => (
+        {doctors.filter(doctor => 
+          (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
+          (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
+        ).sort((a, b) => {
+          switch (sortOption) {
+            case 'rating':
+              return b.rating - a.rating
+            case 'experience':
+              return b.experience - a.experience
+            case 'name':
+              return a.name.localeCompare(b.name)
+            default:
+              return 0
+          }
+        }).map((doctor) => (
           <Card key={doctor.id} className="cursor-pointer hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
@@ -334,7 +372,7 @@ export default function AyurvedicDoctorLocator() {
                     toggleFavorite(doctor)
                   }}
                 >
-                  <Star className={`h-5 w-5 ${userProfile.favoriteDoctors?.includes(doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+                  <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
                 </Button>
               </CardTitle>
               <CardDescription>{doctor.specialization}</CardDescription>
@@ -349,6 +387,7 @@ export default function AyurvedicDoctorLocator() {
                   <Star className="h-4 w-4 text-yellow-400 mr-1" />
                   <span>{doctor.rating}</span>
                 </div>
+              
               </div>
               <div className="mb-2">
                 <Clock className="h-4 w-4 inline mr-2" />
@@ -390,7 +429,7 @@ export default function AyurvedicDoctorLocator() {
                   onClick={() => selectedDoctor && toggleFavorite(selectedDoctor)}
                 >
                   {selectedDoctor && (
-                    <Star className={`h-5 w-5 ${userProfile.favoriteDoctors?.includes(selectedDoctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+                    <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(selectedDoctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
                   )}
                 </Button>
               </CardTitle>
@@ -415,7 +454,7 @@ export default function AyurvedicDoctorLocator() {
                   {selectedDoctor?.availability && Object.entries(selectedDoctor.availability).map(([day, hours]) => (
                     <div key={day} className="flex justify-between">
                       <span>{day}</span>
-                      <span>{hours}</span>
+                      <span>{hours.times}</span> {/* Updated to access 'times' property */}
                     </div>
                   ))}
                 </div>
@@ -505,7 +544,7 @@ export default function AyurvedicDoctorLocator() {
           <form className="space-y-4" onSubmit={(e) => {
             e.preventDefault()
             const formData = new FormData(e.target as HTMLFormElement)
-            const appointment: Omit<Appointment, 'id'> = {
+            const appointment: Omit<Appointment, 'id' | 'userId'> = {
               doctorName: selectedDoctor?.name || '',
               date: formData.get('date') as string,
               time: formData.get('time') as string,
@@ -537,15 +576,15 @@ export default function AyurvedicDoctorLocator() {
             </div>
             <div>
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" name="name" placeholder="Enter your full name" required defaultValue={userProfile.fullName} />
+              <Input id="name" name="name" placeholder="Enter your full name" required defaultValue={userProfile?.fullName} />
             </div>
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="Enter your email" required defaultValue={userProfile.email} />
+              <Input id="email" name="email" type="email" placeholder="Enter your email" required defaultValue={userProfile?.email} />
             </div>
             <div>
               <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" name="phone" type="tel" placeholder="Enter your phone number" required defaultValue={userProfile.phone} />
+              <Input id="phone" name="phone" type="tel" placeholder="Enter your phone number" required defaultValue={userProfile?.phone} />
             </div>
             <div>
               <Label htmlFor="reason">Reason for Visit</Label>
@@ -561,8 +600,8 @@ export default function AyurvedicDoctorLocator() {
   const renderUserProfile = () => (
     <div className="max-w-4xl mx-auto space-y-8">
       <Button variant="ghost" onClick={() => setCurrentPage('home')}>
-        <ChevronLeft className="mr-2 h-3 w-2" />
-        Home
+        <ChevronLeft className="mr-2 h-4 w-4" />
+        Back to Home
       </Button>
       <h2 className="text-2xl font-bold">User Profile</h2>
       <Tabs defaultValue="personal-info" className="w-full">
@@ -584,21 +623,20 @@ export default function AyurvedicDoctorLocator() {
                   fullName: formData.get('fullName') as string,
                   email: formData.get('email') as string,
                   phone: formData.get('phone') as string,
-                  favoriteDoctors: userProfile.favoriteDoctors
                 }
                 updateUserProfile(newProfile)
               }}>
                 <div>
                   <Label htmlFor="full-name">Full Name</Label>
-                  <Input id="full-name" name="fullName" defaultValue={userProfile.fullName} />
+                  <Input id="full-name" name="fullName" defaultValue={userProfile?.fullName} />
                 </div>
                 <div>
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" defaultValue={userProfile.email} />
+                  <Input id="email" name="email" type="email" defaultValue={userProfile?.email} />
                 </div>
                 <div>
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" name="phone" type="tel" defaultValue={userProfile.phone} />
+                  <Input id="phone" name="phone" type="tel" defaultValue={userProfile?.phone} />
                 </div>
                 <Button type="submit">Update Profile</Button>
               </form>
@@ -643,7 +681,7 @@ export default function AyurvedicDoctorLocator() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {doctors.filter(doctor => userProfile.favoriteDoctors?.includes(doctor.id)).map((doctor) => (
+                {doctors.filter(doctor => userProfile?.favoriteDoctors.includes(doctor.id)).map((doctor) => (
                   <Card key={doctor.id}>
                     <CardHeader>
                       <CardTitle>{doctor.name}</CardTitle>
@@ -671,16 +709,24 @@ export default function AyurvedicDoctorLocator() {
     </div>
   )
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-4xl sm:text-3xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur-Find</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayurvedic Doctor Locator</h1>
         <div className="flex items-center space-x-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost">
                 <User className="mr-2 h-4 w-4" />
-                Profile
+                {userProfile?.fullName || 'Profile'}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -716,7 +762,8 @@ export default function AyurvedicDoctorLocator() {
       
       <main>
         {currentPage === 'home' && renderHomePage()}
-        {currentPage === 'doctorListing' && renderDoctorListing()}
+        {currentPage ===
+ 'doctorListing' && renderDoctorListing()}
         {currentPage === 'doctorProfile' && renderDoctorProfile()}
         {currentPage === 'appointmentBooking' && renderAppointmentBooking()}
         {currentPage === 'userProfile' && renderUserProfile()}
