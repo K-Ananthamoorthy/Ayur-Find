@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { auth, db } from '@/lib/firebase'
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
-import { Loader2, AlertCircle, LogIn } from 'lucide-react'
+import { Loader2, AlertCircle, LogIn, Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 
 export default function AuthPage() {
@@ -24,6 +24,7 @@ export default function AuthPage() {
   const [passwordStrength, setPasswordStrength] = useState('')
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({})
   const [authError, setAuthError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -168,11 +169,11 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>Welcome to Ayur-Find</CardTitle>
-          <CardDescription>Login or create an account to continue</CardDescription>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+      <Card className="w-[400px] shadow-lg">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">Welcome to Ayur-Find</CardTitle>
+          <CardDescription className="text-center">Login or create an account to continue</CardDescription>
         </CardHeader>
         <CardContent>
           {authError && (
@@ -182,83 +183,122 @@ export default function AuthPage() {
               <AlertDescription>{authError}</AlertDescription>
             </Alert>
           )}
-          <Tabs defaultValue="login">
+          <Tabs defaultValue="login" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
             <TabsContent value="login">
-              <form onSubmit={(e) => handleAuth(e, 'login')}>
-                <div className="grid gap-2">
+              <form onSubmit={(e) => handleAuth(e, 'login')} className="space-y-4">
+                <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    required 
-                  />
-                  {formErrors.email && <p className="text-sm text-red-500">{formErrors.email}</p>}
+                  <div className="relative">
+                    <Mail className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="email" 
+                      type="email" 
+                      placeholder="Enter your email"
+                      className="pl-8"
+                      value={email} 
+                      onChange={(e) => setEmail(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  {formErrors.email && <p className="text-sm text-destructive">{formErrors.email}</p>}
                 </div>
-                <div className="grid gap-2 mt-2">
+                <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    required 
-                  />
-                  {formErrors.password && <p className="text-sm text-red-500">{formErrors.password}</p>}
+                  <div className="relative">
+                    <Lock className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="password" 
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      className="pl-8 pr-10"
+                      value={password} 
+                      onChange={(e) => setPassword(e.target.value)} 
+                      required 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {formErrors.password && <p className="text-sm text-destructive">{formErrors.password}</p>}
                 </div>
-                <Button type="submit" className="w-full mt-4" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {isLoading ? 'Logging in...' : 'Login'}
                 </Button>
               </form>
-              <div className="mt-4">
+              <div className="mt-4 text-center">
                 <Button variant="link" onClick={handleForgotPassword} disabled={isLoading}>
                   Forgot password?
                 </Button>
               </div>
             </TabsContent>
             <TabsContent value="signup">
-              <form onSubmit={(e) => handleAuth(e, 'signup')}>
-                <div className="grid gap-2">
+              <form onSubmit={(e) => handleAuth(e, 'signup')} className="space-y-4">
+                <div className="space-y-2">
                   <Label htmlFor="fullName">Full Name</Label>
-                  <Input 
-                    id="fullName" 
-                    type="text" 
-                    value={fullName} 
-                    onChange={(e) => setFullName(e.target.value)} 
-                    required 
-                  />
-                  {formErrors.fullName && <p className="text-sm text-red-500">{formErrors.fullName}</p>}
+                  <div className="relative">
+                    <User className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="fullName" 
+                      type="text" 
+                      placeholder="Enter your full name"
+                      className="pl-8"
+                      value={fullName} 
+                      onChange={(e) => setFullName(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  {formErrors.fullName && <p className="text-sm text-destructive">{formErrors.fullName}</p>}
                 </div>
-                <div className="grid gap-2 mt-2">
+                <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    required 
-                  />
-                  {formErrors.email && <p className="text-sm text-red-500">{formErrors.email}</p>}
+                  <div className="relative">
+                    <Mail className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="email" 
+                      type="email" 
+                      placeholder="Enter your email"
+                      className="pl-8"
+                      value={email} 
+                      onChange={(e) => setEmail(e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  {formErrors.email && <p className="text-sm text-destructive">{formErrors.email}</p>}
                 </div>
-                <div className="grid gap-2 mt-2">
+                <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    value={password} 
-                    onChange={(e) => {
-                      setPassword(e.target.value)
-                      checkPasswordStrength(e.target.value)
-                    }} 
-                    required 
-                  />
-                  {formErrors.password && <p className="text-sm text-red-500">{formErrors.password}</p>}
+                  <div className="relative">
+                    <Lock className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="password" 
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Create a password"
+                      className="pl-8 pr-10"
+                      value={password} 
+                      onChange={(e) => {
+                        setPassword(e.target.value)
+                        checkPasswordStrength(e.target.value)
+                      }} 
+                      required 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {formErrors.password && <p className="text-sm text-destructive">{formErrors.password}</p>}
                   {passwordStrength && (
                     <div className={`text-sm ${
                       passwordStrength === 'strong' ? 'text-green-500' : 
@@ -269,14 +309,16 @@ export default function AuthPage() {
                     </div>
                   )}
                 </div>
-                <Button type="submit" className="w-full mt-4" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {isLoading ? 'Signing up...' : 'Sign Up'}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
-          <div className="mt-6">
+        </CardContent>
+        <CardFooter>
+          <div className="w-full space-y-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
@@ -287,12 +329,12 @@ export default function AuthPage() {
                 </span>
               </div>
             </div>
-            <Button variant="outline" className="w-full mt-4" onClick={handleGoogleSignIn} disabled={isLoading}>
+            <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-              {isLoading ? 'Signing in...' : 'Sign in with Google'}
+              {isLoading  ? 'Signing in...' : 'Sign in with Google'}
             </Button>
           </div>
-        </CardContent>
+        </CardFooter>
       </Card>
     </div>
   )
