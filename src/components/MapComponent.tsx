@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -19,14 +18,21 @@ interface Doctor {
   lng: number;
 }
 
-interface MapProps {
-  center: [number, number]
-  zoom: number
-  markers: Doctor[]
-  onMarkerClick?: (doctor: Doctor) => void
-}
 
-const MapComponent = ({ center, zoom, markers, onMarkerClick }: MapProps) => {
+type MapProps = {
+
+  center: [number, number];
+
+  zoom: number;
+
+  markers: Doctor[];
+
+  onMarkerClick?: (doctor: Doctor) => void;
+
+};
+
+
+const MapComponent = ({ center, zoom, markers }: MapProps) => {
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<{ [key: string]: L.Marker }>({})
   const [mapReady, setMapReady] = useState(false)
@@ -105,10 +111,6 @@ const MapComponent = ({ center, zoom, markers, onMarkerClick }: MapProps) => {
             }
           })
 
-          if (onMarkerClick) {
-            newMarker.on('click', () => onMarkerClick(marker))
-          }
-
           markersRef.current[marker.id] = newMarker
         }
       })
@@ -129,7 +131,7 @@ const MapComponent = ({ center, zoom, markers, onMarkerClick }: MapProps) => {
         markersRef.current = {}
       }
     }
-  }, [center, zoom, markers, mapReady, onMarkerClick])
+  }, [center, zoom, markers, mapReady])
 
   useEffect(() => {
     if (mapRef.current && userLocation) {

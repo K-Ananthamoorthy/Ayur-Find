@@ -30,7 +30,6 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 
-// Import the updated MapComponent
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
   loading: () => <p>Loading map...</p>
@@ -89,7 +88,7 @@ export default function AyurvedicDoctorLocator() {
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null) // Added userLocation state
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -102,7 +101,6 @@ export default function AyurvedicDoctorLocator() {
       }
     })
 
-    // Get user's location
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords
@@ -129,7 +127,6 @@ export default function AyurvedicDoctorLocator() {
         const userProfileData = userProfileDoc.data() as UserProfile
         setUserProfile({ ...userProfileData, id: userId })
       } else {
-        // Create a new user profile if it doesn't exist
         const newUserProfile: UserProfile = {
           id: userId,
           fullName: auth.currentUser?.displayName || '',
@@ -141,13 +138,11 @@ export default function AyurvedicDoctorLocator() {
         setUserProfile(newUserProfile)
       }
 
-      // Fetch user-specific appointments
       const appointmentsQuery = query(collection(db, 'appointments'), where('userId', '==', userId))
       const appointmentsSnapshot = await getDocs(appointmentsQuery)
       const appointmentsData = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
       setAppointments(appointmentsData)
 
-      // Fetch all doctors
       const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
       const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
       setDoctors(doctorsData)
@@ -185,7 +180,6 @@ export default function AyurvedicDoctorLocator() {
         description: `${doctor.name} has been ${userProfile.favoriteDoctors.includes(doctor.id) ? "removed from" : "added to"} your favorites.`,
       })
     } catch (error) {
-      
       console.error("Error toggling favorite:", error)
       toast({
         title: "Error",
@@ -326,10 +320,6 @@ export default function AyurvedicDoctorLocator() {
             center={userLocation || [13.3409, 74.7421]} 
             zoom={userLocation ? 13 : 10} 
             markers={doctors}
-            onMarkerClick={(doctor) => {
-              setSelectedDoctor(doctor)
-              setCurrentPage('doctorProfile')
-            }}
           />
         </CardContent>
       </Card>
@@ -384,7 +374,7 @@ export default function AyurvedicDoctorLocator() {
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {doctors.filter(doctor => 
-          searchQuery === '' || // Show all doctors when searchQuery is empty
+          searchQuery === '' || 
           (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
           doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
@@ -409,6 +399,7 @@ export default function AyurvedicDoctorLocator() {
                   variant="ghost"
                   size="sm"
                   onClick={(e) => {
+                    
                     e.stopPropagation()
                     toggleFavorite(doctor)
                   }}
