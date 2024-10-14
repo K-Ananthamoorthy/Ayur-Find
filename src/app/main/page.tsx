@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag, Loader2 } from 'lucide-react'
@@ -29,6 +29,7 @@ import { auth, db } from '@/lib/firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
+import { motion, AnimatePresence } from 'framer-motion'
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -83,7 +84,6 @@ export default function AyurvedicDoctorLocator() {
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
@@ -92,7 +92,6 @@ export default function AyurvedicDoctorLocator() {
   const router = useRouter()
 
   useEffect(() => {
-    setMounted(true)
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         fetchUserData(user.uid)
@@ -119,7 +118,7 @@ export default function AyurvedicDoctorLocator() {
     return () => unsubscribe()
   }, [router])
 
-  const fetchUserData = async (userId: string) => {
+  const fetchUserData = useCallback(async (userId: string) => {
     setLoading(true)
     try {
       const userProfileDoc = await getDoc(doc(db, 'userProfiles', userId))
@@ -138,14 +137,13 @@ export default function AyurvedicDoctorLocator() {
         setUserProfile(newUserProfile)
       }
 
-      const appointmentsQuery = query(collection(db, 'appointments'), where('userId', '==', userId))
-      const appointmentsSnapshot = await getDocs(appointmentsQuery)
-      const appointmentsData = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
-      setAppointments(appointmentsData)
+      const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'appointments'), where('userId', '==', userId))),
+        getDocs(collection(db, 'doctors'))
+      ])
 
-      const doctorsSnapshot = await getDocs(collection(db, 'doctors'))
-      const doctorsData = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor))
-      setDoctors(doctorsData)
+      setAppointments(appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment)))
+      setDoctors(doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor)))
     } catch (error) {
       console.error("Error fetching user data:", error)
       toast({
@@ -156,9 +154,9 @@ export default function AyurvedicDoctorLocator() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const toggleFavorite = async (doctor: Doctor) => {
+  const toggleFavorite = useCallback(async (doctor: Doctor) => {
     if (!userProfile) return
 
     try {
@@ -187,9 +185,9 @@ export default function AyurvedicDoctorLocator() {
         variant: "destructive",
       })
     }
-  }
+  }, [userProfile])
 
-  const addAppointment = async (appointment: Omit<Appointment, 'id' | 'userId'>) => {
+  const addAppointment = useCallback(async (appointment: Omit<Appointment, 'id' | 'userId'>) => {
     if (!userProfile) return
 
     try {
@@ -198,7 +196,7 @@ export default function AyurvedicDoctorLocator() {
         userId: userProfile.id
       }
       const docRef = await addDoc(collection(db, 'appointments'), newAppointment)
-      setAppointments([...appointments, { id: docRef.id, ...newAppointment }])
+      setAppointments(prev => [...prev, { id: docRef.id, ...newAppointment }])
       toast({
         title: "Appointment Booked",
         description: "Your appointment has been successfully booked.",
@@ -211,9 +209,9 @@ export default function AyurvedicDoctorLocator() {
         variant: "destructive",
       })
     }
-  }
+  }, [userProfile])
 
-  const updateUserProfile = async (newProfile: Omit<UserProfile, 'id' | 'favoriteDoctors'>) => {
+  const updateUserProfile = useCallback(async (newProfile: Omit<UserProfile, 'id' | 'favoriteDoctors'>) => {
     if (!userProfile) return
 
     try {
@@ -231,9 +229,9 @@ export default function AyurvedicDoctorLocator() {
         variant: "destructive",
       })
     }
-  }
+  }, [userProfile])
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await signOut(auth)
       setUserProfile(null)
@@ -246,10 +244,16 @@ export default function AyurvedicDoctorLocator() {
         variant: "destructive",
       })
     }
-  }
+  }, [router])
 
   const renderHomePage = () => (
-    <div className="space-y-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-8"
+    >
       <div className="flex flex-col sm:flex-row items-center gap-4">
         <Input
           type="text"
@@ -316,24 +320,32 @@ export default function AyurvedicDoctorLocator() {
           <CardTitle>Ayurvedic Doctors Near You</CardTitle>
         </CardHeader>
         <CardContent className="p-0" style={{ height: '400px' }}>
-          <MapComponent 
-            center={userLocation || [13.3409, 74.7421]} 
-            zoom={userLocation ? 13 : 10} 
-            markers={doctors}
-          />
+          <Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <MapComponent 
+              center={userLocation || [13.3409, 74.7421]} 
+              zoom={userLocation ? 13 : 10} 
+              markers={doctors}
+            />
+          </Suspense>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   )
 
   const renderDoctorListing = () => (
-    <div className="space-y-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-8"
+    >
       <div className="flex justify-between items-center">
         <Button variant="ghost" onClick={() => setCurrentPage('home')}>
           <ChevronLeft className="mr-2 h-3 w-2" />
           Back to Home
         </Button>
-        <h2 className="text-2xl font-bold">Ayurvedic Doctors</h2>
+        <h2 className="text-1xl font-bold">Ayurvedic Doctors</h2>
       </div>
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap gap-2">
@@ -373,77 +385,92 @@ export default function AyurvedicDoctorLocator() {
         </div>
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {doctors.filter(doctor => 
-          searchQuery === '' || 
-          (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doctor.location.toLowerCase().includes(searchQuery.toLowerCase())) &&
-          (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
-        ).sort((a, b) => {
-          switch (sortOption) {
-            case 'rating':
-              return b.rating - a.rating
-            case 'experience':
-              return b.experience - a.experience
-            case 'name':
-              return a.name.localeCompare(b.name)
-            default:
-              return 0
-          }
-        }).map((doctor) => (
-          <Card key={doctor.id} className="cursor-pointer hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>{doctor.name}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    
-                    e.stopPropagation()
-                    toggleFavorite(doctor)
-                  }}
-                >
-                  <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(doctor.id) ? 'text-yellow-400  fill-yellow-400' : 'text-muted-foreground'}`} />
-                </Button>
-              </CardTitle>
-              <CardDescription>{doctor.specialization}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  <span>{doctor.location}</span>
-                </div>
-                <div className="flex items-center">
-                  <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                  <span>{doctor.rating}</span>
-                </div>
-              </div>
-              <div className="mb-2">
-                <Clock className="h-4 w-4 inline mr-2" />
-                <span>{doctor.experience} years experience</span>
-              </div>
-              <div className="flex flex-wrap gap-1 mb-4">
-                {doctor.tags.map(tag => (
-                  <Badge key={tag} variant="secondary">{tag}</Badge>
-                ))}
-              </div>
-              <Button className="w-full" onClick={() => {
-                setSelectedDoctor(doctor)
-                setCurrentPage('doctorProfile')
-              }}>
-                View Profile
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+        <AnimatePresence>
+          {doctors.filter(doctor => 
+            searchQuery === '' || 
+            (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) 
+            || doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase())
+            || doctor.location.toLowerCase().includes(searchQuery.toLowerCase()))
+            && (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
+          ).sort((a, b) => {
+            switch (sortOption) {
+              case 'rating':
+                return b.rating - a.rating
+              case 'experience':
+                return b.experience - a.experience
+              case 'name':
+                return a.name.localeCompare(b.name)
+              default:
+                return 0
+            }
+          }).map((doctor) => (
+            <motion.div
+              key={doctor.id}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>{doctor.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleFavorite(doctor)
+                      }}
+                    >
+                      <Star className={`h-5 w-5 ${userProfile?.favoriteDoctors.includes(doctor.id) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>{doctor.specialization}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      <span>{doctor.location}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <Star className="h-4 w-4 text-yellow-400 mr-1" />
+                      <span>{doctor.rating}</span>
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <Clock className="h-4 w-4 inline mr-2" />
+                    <span>{doctor.experience} years experience</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {doctor.tags.map(tag => (
+                      <Badge key={tag} variant="secondary">{tag}</Badge>
+                    ))}
+                  </div>
+                  <Button className="w-full" onClick={() => {
+                    setSelectedDoctor(doctor)
+                    setCurrentPage('doctorProfile')
+                  }}>
+                    View Profile
+                  </Button>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   )
 
   const renderDoctorProfile = () => (
-    <div className="space-y-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-8"
+    >
       <Button variant="ghost" onClick={() => setCurrentPage('doctorListing')}>
         <ChevronLeft className="mr-2 h-4 w-4" />
         Back to Listings
@@ -473,7 +500,7 @@ export default function AyurvedicDoctorLocator() {
                   <span>{selectedDoctor?.location}</span>
                 </div>
                 <div className="flex items-center">
-                  <Star  className="h-5 w-5 text-yellow-400 mr-2" />
+                  <Star className="h-5 w-5 text-yellow-400 mr-2" />
                   <span>{selectedDoctor?.rating} (50 reviews)</span>
                 </div>
                 <div className="flex items-center">
@@ -548,21 +575,29 @@ export default function AyurvedicDoctorLocator() {
             </CardHeader>
             <CardContent className="p-0" style={{ height: '200px' }}>
               {selectedDoctor && (
-                <MapComponent 
-                  center={[selectedDoctor.lat, selectedDoctor.lng]} 
-                  zoom={14} 
-                  markers={[selectedDoctor]} 
-                />
+                <Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+                  <MapComponent 
+                    center={[selectedDoctor.lat, selectedDoctor.lng]} 
+                    zoom={14} 
+                    markers={[selectedDoctor]} 
+                  />
+                </Suspense>
               )}
             </CardContent>
           </Card>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 
   const renderAppointmentBooking = () => (
-    <div className="max-w-md mx-auto space-y-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="max-w-md mx-auto space-y-8"
+    >
       <Button variant="ghost" onClick={() => setCurrentPage('doctorProfile')}>
         <ChevronLeft className="mr-2 h-4 w-4" />
         Back to Doctor Profile
@@ -625,19 +660,25 @@ export default function AyurvedicDoctorLocator() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   )
 
   const renderUserProfile = () => (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="max-w-4xl mx-auto space-y-8"
+    >
       <Button variant="ghost" onClick={() => setCurrentPage('home')}>
         <ChevronLeft className="mr-2 h-3 w-2" />
         Back to Home
       </Button>
       <h2 className="text-2xl font-bold">User Profile</h2>
       <Tabs defaultValue="personal-info" className="w-full">
-        <TabsList className="flex flex-wrap w-full">
-          <TabsTrigger value="personal-info">User Info</TabsTrigger>
+      <TabsList className="flex flex-wrap w-full">
+          <TabsTrigger value="personal-info">user info</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="favorite-doctors">Favorite Doctors</TabsTrigger>
         </TabsList>
@@ -737,19 +778,31 @@ export default function AyurvedicDoctorLocator() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </motion.div>
   )
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <Loader2 className="h-10 w-10 animate-spin" />
       </div>
     )
   }
+  const renderFooter = () => (
+    <footer className="bg-gray-800 text-white py-4 mt-8">
+      <div className="container mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center">
+        <p className="text-sm">&copy; {new Date().getFullYear()} Ayur-Find. All rights reserved.</p>
+        <div className="flex space-x-4 mt-4 sm:mt-0">
+          <a href="#" className="text-sm hover:underline">Privacy Policy</a>
+          <a href="#" className="text-sm hover:underline">Terms of Service</a>
+          <a href="#" className="text-sm hover:underline">Contact Us</a>
+        </div>
+      </div>
+    </footer>
+  )
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen">
+    <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen flex flex-col">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
         <h1 className="text-5xl sm:text-5xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur-Find</h1>
         <div className="flex items-center space-x-4">
@@ -784,20 +837,24 @@ export default function AyurvedicDoctorLocator() {
                 Dark
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")}>
-                System
+                System  
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
       
-      <main>
-        {currentPage === 'home' && renderHomePage()}
-        {currentPage === 'doctorListing' && renderDoctorListing()}
-        {currentPage === 'doctorProfile' && renderDoctorProfile()}
-        {currentPage === 'appointmentBooking' && renderAppointmentBooking()}
-        {currentPage === 'userProfile' && renderUserProfile()}
+      <main className="flex-grow">
+        <AnimatePresence mode="wait">
+          {currentPage === 'home' && renderHomePage()}
+          {currentPage === 'doctorListing' && renderDoctorListing()}
+          {currentPage === 'doctorProfile' && renderDoctorProfile()}
+          {currentPage === 'appointmentBooking' && renderAppointmentBooking()}
+          {currentPage === 'userProfile' && renderUserProfile()}
+        </AnimatePresence>
       </main>
+
+      {renderFooter()}
     </div>
-  )
-}
+  ) 
+  }
