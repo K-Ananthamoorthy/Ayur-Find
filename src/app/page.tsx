@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from 'next/link'
@@ -17,9 +17,26 @@ export default function LandingPage() {
   const [mounted, setMounted] = useState(false)
   const { scrollYProgress } = useScroll()
   const backgroundY = useTransform(scrollYProgress, [0, 1], ['0%', '100%'])
+  const [activeSection, setActiveSection] = useState('')
 
   useEffect(() => {
     setMounted(true)
+
+    const handleScroll = () => {
+      const sections = ['features', 'why-choose-us', 'get-started']
+      const currentSection = sections.find(section => {
+        const element = document.getElementById(section)
+        if (element) {
+          const rect = element.getBoundingClientRect()
+          return rect.top <= 100 && rect.bottom >= 100
+        }
+        return false
+      })
+      setActiveSection(currentSection || '')
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
   if (!mounted) return null
@@ -27,6 +44,10 @@ export default function LandingPage() {
   const fadeInUp = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0 }
+  }
+
+  const staggerChildren = {
+    visible: { transition: { staggerChildren: 0.2 } }
   }
 
   return (
@@ -37,9 +58,17 @@ export default function LandingPage() {
             Ayur-Find
           </Link>
           <div className="hidden md:flex space-x-4">
-            <Link href="#features" className="text-green-700 dark:text-green-200 hover:text-green-900 dark:hover:text-green-100">Features</Link>
-            <Link href="#why-choose-us" className="text-green-700 dark:text-green-200 hover:text-green-900 dark:hover:text-green-100">Why Choose Us</Link>
-            <Link href="#get-started" className="text-green-700 dark:text-green-200 hover:text-green-900 dark:hover:text-green-100">Get Started</Link>
+            {['features', 'why-choose-us', 'get-started'].map((section) => (
+              <Link
+                key={section}
+                href={`#${section}`}
+                className={`text-green-700 dark:text-green-200 hover:text-green-900 dark:hover:text-green-100 transition-colors duration-200 ${
+                  activeSection === section ? 'font-bold' : ''
+                }`}
+              >
+                {section.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+              </Link>
+            ))}
           </div>
           <div className="md:hidden">
             <DropdownMenu>
@@ -50,15 +79,11 @@ export default function LandingPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
-                  Features
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => document.getElementById('why-choose-us')?.scrollIntoView({ behavior: 'smooth' })}>
-                  Why Choose Us
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => document.getElementById('get-started')?.scrollIntoView({ behavior: 'smooth' })}>
-                  Get Started
-                </DropdownMenuItem>
+                {['features', 'why-choose-us', 'get-started'].map((section) => (
+                  <DropdownMenuItem key={section} onSelect={() => document.getElementById(section)?.scrollIntoView({ behavior: 'smooth' })}>
+                    {section.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -81,12 +106,22 @@ export default function LandingPage() {
             variants={fadeInUp}
             transition={{ duration: 0.8, ease: "easeOut" }}
           >
-            <h1 className="text-4xl md:text-6xl font-bold text-green-800 dark:text-green-100 mb-6">
+            <motion.h1 
+              className="text-4xl md:text-6xl font-bold text-green-800 dark:text-green-100 mb-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.8 }}
+            >
               Discover Ayurveda with Ayur-Find
-            </h1>
-            <p className="text-xl md:text-2xl text-green-700 dark:text-green-200 max-w-3xl mx-auto">
+            </motion.h1>
+            <motion.p 
+              className="text-xl md:text-2xl text-green-700 dark:text-green-200 max-w-3xl mx-auto"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.8 }}
+            >
               Your journey to holistic wellness begins here
-            </p>
+            </motion.p>
           </motion.header>
 
           <motion.div 
@@ -94,7 +129,7 @@ export default function LandingPage() {
             variants={fadeInUp}
             initial="hidden"
             animate="visible"
-            transition={{ delay: 0.2, duration: 0.8 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
           >
             <Link href="/auth" passHref>
               <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white text-lg px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300">
@@ -107,17 +142,21 @@ export default function LandingPage() {
           <motion.div 
             id="features"
             className="grid md:grid-cols-3 gap-8 mb-16"
-            variants={fadeInUp}
+            variants={staggerChildren}
             initial="hidden"
             animate="visible"
-            transition={{ delay: 0.4, duration: 0.8, staggerChildren: 0.2 }}
           >
             {[
               { icon: Search, title: "Find Experts", description: "Discover Ayurvedic practitioners near you" },
               { icon: Calendar, title: "Easy Booking", description: "Schedule consultations with a few clicks" },
               { icon: Star, title: "Verified Reviews", description: "Read authentic patient experiences" }
             ].map((feature, index) => (
-              <motion.div key={index} whileHover={{ scale: 1.03 }} transition={{ type: "spring", stiffness: 300 }}>
+              <motion.div 
+                key={index} 
+                variants={fadeInUp}
+                whileHover={{ scale: 1.03 }} 
+                transition={{ type: "spring", stiffness: 300 }}
+              >
                 <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:shadow-lg transition-all duration-300">
                   <CardContent className="p-6">
                     <feature.icon className="h-12 w-12 text-green-600 dark:text-green-400 mb-4" />
@@ -135,17 +174,16 @@ export default function LandingPage() {
             variants={fadeInUp}
             initial="hidden"
             animate="visible"
-            transition={{ delay: 0.6, duration: 0.8 }}
+            transition={{ delay: 0.8, duration: 0.8 }}
           >
             <h2 className="text-3xl font-semibold text-green-800 dark:text-green-100 mb-8">
               Why Choose Ayur-Find?
             </h2>
             <motion.div 
               className="grid md:grid-cols-3 gap-8"
-              variants={fadeInUp}
+              variants={staggerChildren}
               initial="hidden"
               animate="visible"
-              transition={{ delay: 0.8, duration: 0.8, staggerChildren: 0.2 }}
             >
               {[
                 { icon: Users, title: "Expert Network", description: "Access qualified Ayurvedic doctors" },
@@ -155,6 +193,7 @@ export default function LandingPage() {
                 <motion.div 
                   key={index} 
                   className="flex flex-col items-center"
+                  variants={fadeInUp}
                   whileHover={{ y: -5 }}
                   transition={{ type: "spring", stiffness: 300 }}
                 >
@@ -200,9 +239,13 @@ export default function LandingPage() {
             <div>
               <h3 className="text-xl font-semibold mb-4">Quick Links</h3>
               <ul className="space-y-2">
-                <li><Link href="#features" className="hover:text-green-300">Features</Link></li>
-                <li><Link href="#why-choose-us" className="hover:text-green-300">Why Choose Us</Link></li>
-                <li><Link href="#get-started" className="hover:text-green-300">Get Started</Link></li>
+                {['features', 'why-choose-us', 'get-started'].map((section) => (
+                  <li key={section}>
+                    <Link href={`#${section}`} className="hover:text-green-300 transition-colors duration-200">
+                      {section.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
             <div>

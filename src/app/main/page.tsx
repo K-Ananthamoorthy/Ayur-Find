@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag, Loader2 } from 'lucide-react'
@@ -33,7 +33,25 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
-  loading: () => <p>Loading map...</p>
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <motion.div
+        animate={{
+          scale: [1, 2, 2, 1, 1],
+          rotate: [0, 0, 270, 270, 0],
+          borderRadius: ["20%", "20%", "50%", "50%", "20%"],
+        }}
+        transition={{
+          duration: 2,
+          ease: "easeInOut",
+          times: [0, 0.2, 0.5, 0.8, 1],
+          repeat: Infinity,
+          repeatDelay: 1
+        }}
+        className="w-12 h-12 bg-primary"
+      />
+    </div>
+  )
 })
 
 interface Doctor {
@@ -246,6 +264,27 @@ export default function AyurvedicDoctorLocator() {
     }
   }, [router])
 
+  const filteredDoctors = useMemo(() => {
+    return doctors.filter(doctor => 
+      searchQuery === '' || 
+      (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) 
+      || doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase())
+      || doctor.location.toLowerCase().includes(searchQuery.toLowerCase()))
+      && (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
+    ).sort((a, b) => {
+      switch (sortOption) {
+        case 'rating':
+          return b.rating - a.rating
+        case 'experience':
+          return b.experience - a.experience
+        case 'name':
+          return a.name.localeCompare(b.name)
+        default:
+          return 0
+      }
+    })
+  }, [doctors, searchQuery, selectedTags, sortOption])
+
   const renderHomePage = () => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -320,7 +359,25 @@ export default function AyurvedicDoctorLocator() {
           <CardTitle>Ayurvedic Doctors Near You</CardTitle>
         </CardHeader>
         <CardContent className="p-0" style={{ height: '400px' }}>
-          <Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+          <Suspense fallback={
+            <div className="h-full flex items-center justify-center">
+              <motion.div
+                animate={{
+                  scale: [1, 2, 2, 1, 1],
+                  rotate: [0, 0, 270, 270, 0],
+                  borderRadius: ["20%", "20%", "50%", "50%", "20%"],
+                }}
+                transition={{
+                  duration: 2,
+                  ease: "easeInOut",
+                  times: [0, 0.2, 0.5, 0.8, 1],
+                  repeat: Infinity,
+                  repeatDelay: 1
+                }}
+                className="w-12 h-12 bg-primary"
+              />
+            </div>
+          }>
             <MapComponent 
               center={userLocation || [13.3409, 74.7421]} 
               zoom={userLocation ? 13 : 10} 
@@ -337,7 +394,7 @@ export default function AyurvedicDoctorLocator() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: 0.3  }}
       className="space-y-8"
     >
       <div className="flex justify-between items-center">
@@ -386,24 +443,7 @@ export default function AyurvedicDoctorLocator() {
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <AnimatePresence>
-          {doctors.filter(doctor => 
-            searchQuery === '' || 
-            (doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) 
-            || doctor.specialization.toLowerCase().includes(searchQuery.toLowerCase())
-            || doctor.location.toLowerCase().includes(searchQuery.toLowerCase()))
-            && (selectedTags.length === 0 || selectedTags.every(tag => doctor.tags.includes(tag)))
-          ).sort((a, b) => {
-            switch (sortOption) {
-              case 'rating':
-                return b.rating - a.rating
-              case 'experience':
-                return b.experience - a.experience
-              case 'name':
-                return a.name.localeCompare(b.name)
-              default:
-                return 0
-            }
-          }).map((doctor) => (
+          {filteredDoctors.map((doctor) => (
             <motion.div
               key={doctor.id}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -575,7 +615,25 @@ export default function AyurvedicDoctorLocator() {
             </CardHeader>
             <CardContent className="p-0" style={{ height: '200px' }}>
               {selectedDoctor && (
-                <Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+                <Suspense fallback={
+                  <div className="h-full flex items-center justify-center">
+                    <motion.div
+                      animate={{
+                        scale: [1, 2, 2, 1, 1],
+                        rotate: [0, 0, 270, 270, 0],
+                        borderRadius: ["20%", "20%", "50%", "50%", "20%"],
+                      }}
+                      transition={{
+                        duration: 2,
+                        ease: "easeInOut",
+                        times: [0, 0.2, 0.5, 0.8, 1],
+                        repeat: Infinity,
+                        repeatDelay: 1
+                      }}
+                      className="w-12 h-12 bg-primary"
+                    />
+                  </div>
+                }>
                   <MapComponent 
                     center={[selectedDoctor.lat, selectedDoctor.lng]} 
                     zoom={14} 
@@ -784,10 +842,25 @@ export default function AyurvedicDoctorLocator() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-10 w-10 animate-spin" />
+        <motion.div
+          animate={{
+        scale: [1, 2, 2, 1, 1],
+        rotate: [0, 0, 270, 270, 0],
+        borderRadius: ["20%", "20%", "50%", "50%", "20%"],
+          }}
+          transition={{
+        duration: 3, // Increased duration from 2 to 4
+        ease: "easeInOut",
+        times: [0, 0.2, 0.5, 0.8, 1],
+        repeat: Infinity,
+        repeatDelay: 1
+          }}
+          className="w-16 h-16 bg-primary"
+        />
       </div>
     )
   }
+
   const renderFooter = () => (
     <footer className="bg-gray-800 text-white py-4 mt-8">
       <div className="container mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center">
@@ -804,7 +877,14 @@ export default function AyurvedicDoctorLocator() {
   return (
     <div className="container mx-auto px-4 sm:px-6 py-8 transition-colors duration-200 min-h-screen flex flex-col">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-5xl sm:text-5xl font-bold cursor-pointer" onClick={() => setCurrentPage('home')}>Ayur-Find</h1>
+        <motion.h1 
+          className="text-5xl sm:text-5xl font-bold cursor-pointer"
+          onClick={() => setCurrentPage('home')}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          Ayur-Find
+        </motion.h1>
         <div className="flex items-center space-x-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -856,5 +936,5 @@ export default function AyurvedicDoctorLocator() {
 
       {renderFooter()}
     </div>
-  ) 
-  }
+  )
+}
