@@ -14,8 +14,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Switch } from "@/components/ui/switch"
 import * as XLSX from 'xlsx'
-import { Loader2, Plus, Upload } from 'lucide-react'
+import { Loader2, Plus, Upload, Moon, Sun } from 'lucide-react'
+import { useTheme } from 'next-themes'
 
 interface Doctor {
   id: string
@@ -96,6 +98,7 @@ export default function AdminPage() {
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null)
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -295,21 +298,22 @@ export default function AdminPage() {
       const worksheet = workbook.Sheets[sheetName]
       const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-      for (const row of jsonData as any[]) {
-        const doctor: Omit<Doctor, 'id'> = {
-          name: row.Name || '',
-          email: row.Email || '',
-          phone: row.Phone || '',
-          specialization: row.Specialization || '',
-          location: row.Location || '',
-          rating: parseFloat(row.Rating) || 0,
-          lat: parseFloat(row.Latitude) || 0,
-          lng: parseFloat(row.Longitude) || 0,
-          experience: parseInt(row.Experience) || 0,
-          tags: (row.Tags || '').split(',').map((tag: string) => tag.trim()),
-          about: row.About || '',
-          services: (row.Services || '').split(',').map((service: string) => service.trim()),
-          education: row.Education || '',
+      if (jsonData.length > 0) {
+        const firstRow = jsonData[0] as any
+        setNewDoctor({
+          name: firstRow.Name || '',
+          email: firstRow.Email || '',
+          phone: firstRow.Phone || '',
+          specialization: firstRow.Specialization || '',
+          location: firstRow.Location || '',
+          rating: parseFloat(firstRow.Rating) || 0,
+          lat: parseFloat(firstRow.Latitude) || 0,
+          lng: parseFloat(firstRow.Longitude) || 0,
+          experience: parseInt(firstRow.Experience) || 0,
+          tags: (firstRow.Tags || '').split(',').map((tag: string) => tag.trim()),
+          about: firstRow.About || '',
+          services: (firstRow.Services || '').split(',').map((service: string) => service.trim()),
+          education: firstRow.Education || '',
           availability: {
             Monday: { isAvailable: false, times: '' },
             Tuesday: { isAvailable: false, times: '' },
@@ -319,16 +323,8 @@ export default function AdminPage() {
             Saturday: { isAvailable: false, times: '' },
             Sunday: { isAvailable: false, times: '' },
           }
-        }
-
-        try {
-          await addDoc(collection(db, 'doctors'), doctor)
-        } catch (err) {
-          console.error("Error adding doctor from Excel:", err)
-        }
+        })
       }
-
-      await fetchData()
     }
     reader.readAsArrayBuffer(file)
   }
@@ -344,7 +340,21 @@ export default function AdminPage() {
   if (user && user.email === 'ayurvedicheal@gmail.com') {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Admin Panel</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Admin Panel</h1>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Switch
+                id="theme-toggle"
+                checked={theme === 'dark'}
+                onCheckedChange={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+              />
+              <Moon className="h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            </div>
+            <Button onClick={handleLogout}>Logout</Button>
+          </div>
+        </div>
         {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{error}</div>}
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -363,7 +373,7 @@ export default function AdminPage() {
                   <p className="text-3xl font-bold">{appointments.length}</p>
                 </div>
                 <div className="bg-primary/10 p-4 rounded-lg">
-                  <h3 className="font-semibold text-lg">Total Users</h3>
+                  <h3 className="font-semibold text-lg">Total  Users</h3>
                   <p className="text-3xl font-bold">{userProfiles.length}</p>
                 </div>
               </div>
@@ -378,11 +388,8 @@ export default function AdminPage() {
               <div className="flex flex-col space-y-2">
                 <Button variant={activeTab === 'overview' ? "default" : "outline"} onClick={() => setActiveTab('overview')}>Overview</Button>
                 <Button variant={activeTab === 'doctors' ? "default" : "outline"} onClick={() => setActiveTab('doctors')}>Manage Doctors</Button>
-                <Button variant={activeTab === 
-
- 'appointments' ? "default" : "outline"} onClick={() => setActiveTab('appointments')}>Manage Appointments</Button>
+                <Button variant={activeTab === 'appointments' ? "default" : "outline"} onClick={() => setActiveTab('appointments')}>Manage Appointments</Button>
                 <Button variant={activeTab === 'users' ? "default" : "outline"} onClick={() => setActiveTab('users')}>Manage Users</Button>
-                <Button onClick={handleLogout}>Logout</Button>
               </div>
             </CardContent>
           </Card>

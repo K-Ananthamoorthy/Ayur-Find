@@ -89,6 +89,7 @@ export default function AyurvedicDoctorLocator() {
   const { theme, setTheme } = useTheme()
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null) // Added userLocation state
   const router = useRouter()
 
   useEffect(() => {
@@ -100,6 +101,22 @@ export default function AyurvedicDoctorLocator() {
         router.push('/auth')
       }
     })
+
+    // Get user's location
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        setUserLocation([latitude, longitude])
+      },
+      (error) => {
+        console.error('Error getting user location:', error)
+        toast({
+          title: "Location Error",
+          description: "Unable to get your location. Please enable location services.",
+          variant: "destructive",
+        })
+      }
+    )
 
     return () => unsubscribe()
   }, [router])
@@ -168,6 +185,7 @@ export default function AyurvedicDoctorLocator() {
         description: `${doctor.name} has been ${userProfile.favoriteDoctors.includes(doctor.id) ? "removed from" : "added to"} your favorites.`,
       })
     } catch (error) {
+      
       console.error("Error toggling favorite:", error)
       toast({
         title: "Error",
@@ -304,7 +322,15 @@ export default function AyurvedicDoctorLocator() {
           <CardTitle>Ayurvedic Doctors Near You</CardTitle>
         </CardHeader>
         <CardContent className="p-0" style={{ height: '400px' }}>
-          <MapComponent center={[13.3409, 74.7421]} zoom={10} markers={doctors} />
+          <MapComponent 
+            center={userLocation || [13.3409, 74.7421]} 
+            zoom={userLocation ? 13 : 10} 
+            markers={doctors}
+            onMarkerClick={(doctor) => {
+              setSelectedDoctor(doctor)
+              setCurrentPage('doctorProfile')
+            }}
+          />
         </CardContent>
       </Card>
     </div>
