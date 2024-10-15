@@ -380,6 +380,7 @@ export default function AdminPage() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="doctors">Doctors</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
+            
             <TabsTrigger value="users">Users</TabsTrigger>
           </TabsList>
           

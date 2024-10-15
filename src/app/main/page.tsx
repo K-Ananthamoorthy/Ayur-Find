@@ -33,26 +33,28 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
-  loading: () => (
-    <div className="h-full flex items-center justify-center">
-      <motion.div
-        animate={{
-          scale: [1, 2, 2, 1, 1],
-          rotate: [0, 0, 270, 270, 0],
-          borderRadius: ["20%", "20%", "50%", "50%", "20%"],
-        }}
-        transition={{
-          duration: 2,
-          ease: "easeInOut",
-          times: [0, 0.2, 0.5, 0.8, 1],
-          repeat: Infinity,
-          repeatDelay: 1
-        }}
-        className="w-12 h-12 bg-primary"
-      />
-    </div>
-  )
+  loading: () => <LoadingSpinner />
 })
+
+const LoadingSpinner = () => (
+  <div className="h-full flex items-center justify-center">
+    <motion.div
+      animate={{
+        scale: [1, 2, 2, 1, 1],
+        rotate: [0, 0, 270, 270, 0],
+        borderRadius: ["20%", "20%", "50%", "50%", "20%"],
+      }}
+      transition={{
+        duration: 2,
+        ease: "easeInOut",
+        times: [0, 0.2, 0.5, 0.8, 1],
+        repeat: Infinity,
+        repeatDelay: 1
+      }}
+      className="w-12 h-12 bg-primary"
+    />
+  </div>
+)
 
 interface Doctor {
   id: string;
@@ -73,6 +75,8 @@ interface Doctor {
       times: string;
     };
   };
+  phone: string;
+  email: string;
 }
 
 interface Appointment {
@@ -359,25 +363,7 @@ export default function AyurvedicDoctorLocator() {
           <CardTitle>Ayurvedic Doctors Near You</CardTitle>
         </CardHeader>
         <CardContent className="p-0" style={{ height: '400px' }}>
-          <Suspense fallback={
-            <div className="h-full flex items-center justify-center">
-              <motion.div
-                animate={{
-                  scale: [1, 2, 2, 1, 1],
-                  rotate: [0, 0, 270, 270, 0],
-                  borderRadius: ["20%", "20%", "50%", "50%", "20%"],
-                }}
-                transition={{
-                  duration: 2,
-                  ease: "easeInOut",
-                  times: [0, 0.2, 0.5, 0.8, 1],
-                  repeat: Infinity,
-                  repeatDelay: 1
-                }}
-                className="w-12 h-12 bg-primary"
-              />
-            </div>
-          }>
+          <Suspense fallback={<LoadingSpinner />}>
             <MapComponent 
               center={userLocation || [13.3409, 74.7421]} 
               zoom={userLocation ? 13 : 10} 
@@ -407,6 +393,7 @@ export default function AyurvedicDoctorLocator() {
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap gap-2">
           <Select value={sortOption} onValueChange={setSortOption}>
+            
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -549,20 +536,20 @@ export default function AyurvedicDoctorLocator() {
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2">Availability</h3>
-                  {selectedDoctor?.availability && Object.entries(selectedDoctor.availability).map(([day, hours]) => (
+                  {selectedDoctor?.availability && Object.entries(selectedDoctor.availability).map(([day, { isAvailable, times }]) => (
                     <div key={day} className="flex justify-between">
                       <span>{day}</span>
-                      <span>{hours.times}</span>
+                      <span>{isAvailable ? times : 'Not available'}</span>
                     </div>
                   ))}
                 </div>
                 <div className="flex items-center">
                   <Phone className="h-5 w-5 mr-2" />
-                  <span>+91 1234567890</span>
+                  <span>{selectedDoctor?.phone}</span>
                 </div>
                 <div className="flex items-center">
                   <Mail className="h-5 w-5 mr-2" />
-                  <span>{selectedDoctor?.name.toLowerCase().replace(' ', '.')}@example.com</span>
+                  <span>{selectedDoctor?.email}</span>
                 </div>
               </div>
             </CardContent>
@@ -615,25 +602,7 @@ export default function AyurvedicDoctorLocator() {
             </CardHeader>
             <CardContent className="p-0" style={{ height: '200px' }}>
               {selectedDoctor && (
-                <Suspense fallback={
-                  <div className="h-full flex items-center justify-center">
-                    <motion.div
-                      animate={{
-                        scale: [1, 2, 2, 1, 1],
-                        rotate: [0, 0, 270, 270, 0],
-                        borderRadius: ["20%", "20%", "50%", "50%", "20%"],
-                      }}
-                      transition={{
-                        duration: 2,
-                        ease: "easeInOut",
-                        times: [0, 0.2, 0.5, 0.8, 1],
-                        repeat: Infinity,
-                        repeatDelay: 1
-                      }}
-                      className="w-12 h-12 bg-primary"
-                    />
-                  </div>
-                }>
+                <Suspense fallback={<LoadingSpinner />}>
                   <MapComponent 
                     center={[selectedDoctor.lat, selectedDoctor.lng]} 
                     zoom={14} 
@@ -736,7 +705,7 @@ export default function AyurvedicDoctorLocator() {
       <h2 className="text-2xl font-bold">User Profile</h2>
       <Tabs defaultValue="personal-info" className="w-full">
       <TabsList className="flex flex-wrap w-full">
-          <TabsTrigger value="personal-info">user info</TabsTrigger>
+          <TabsTrigger value="personal-info">User Info</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="favorite-doctors">Favorite Doctors</TabsTrigger>
         </TabsList>
@@ -842,21 +811,7 @@ export default function AyurvedicDoctorLocator() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <motion.div
-          animate={{
-        scale: [1, 2, 2, 1, 1],
-        rotate: [0, 0, 270, 270, 0],
-        borderRadius: ["20%", "20%", "50%", "50%", "20%"],
-          }}
-          transition={{
-        duration: 3, // Increased duration from 2 to 4
-        ease: "easeInOut",
-        times: [0, 0.2, 0.5, 0.8, 1],
-        repeat: Infinity,
-        repeatDelay: 1
-          }}
-          className="w-16 h-16 bg-primary"
-        />
+        <LoadingSpinner />
       </div>
     )
   }
