@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback, Suspense, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag, Loader2 } from 'lucide-react'
+import { Search, MapPin, Moon, Sun, Star, Calendar, User, ChevronLeft, Phone, Mail, Clock, Tag, Loader2, AlertTriangle } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { auth, db } from '@/lib/firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
@@ -82,6 +83,7 @@ interface Doctor {
 interface Appointment {
   id: string;
   userId: string;
+  doctorId: string;
   doctorName: string;
   date: string;
   time: string;
@@ -89,6 +91,7 @@ interface Appointment {
   email: string;
   phone: string;
   reason: string;
+  status: 'scheduled' | 'rescheduling' | 'cancelled';
 }
 
 interface UserProfile {
@@ -111,6 +114,8 @@ export default function AyurvedicDoctorLocator() {
   const [sortOption, setSortOption] = useState('rating')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
+  const [isRescheduling, setIsRescheduling] = useState(false)
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -209,13 +214,14 @@ export default function AyurvedicDoctorLocator() {
     }
   }, [userProfile])
 
-  const addAppointment = useCallback(async (appointment: Omit<Appointment, 'id' | 'userId'>) => {
+  const addAppointment = useCallback(async (appointment: Omit<Appointment, 'id' | 'userId' | 'status'>) => {
     if (!userProfile) return
 
     try {
       const newAppointment = {
         ...appointment,
-        userId: userProfile.id
+        userId: userProfile.id,
+        status: 'scheduled' as const
       }
       const docRef = await addDoc(collection(db, 'appointments'), newAppointment)
       setAppointments(prev => [...prev, { id: docRef.id, ...newAppointment }])
@@ -267,6 +273,46 @@ export default function AyurvedicDoctorLocator() {
       })
     }
   }, [router])
+
+  const requestReschedule = useCallback(async (appointment: Appointment) => {
+    try {
+      await updateDoc(doc(db, 'appointments', appointment.id), {
+        status: 'rescheduling'
+      })
+      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'rescheduling' } : a))
+      toast({
+        title: "Reschedule Requested",
+        description: "Your reschedule request has been sent to the doctor.",
+      })
+    } catch (error) {
+      console.error("Error requesting reschedule:", error)
+      toast({
+        title: "Error",
+        description: "Failed to request reschedule. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }, [])
+
+  const cancelAppointment = useCallback(async (appointmentId: string) => {
+    try {
+      await updateDoc(doc(db, 'appointments', appointmentId), {
+        status: 'cancelled'
+      })
+      setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status: 'cancelled' } : a))
+      toast({
+        title: "Appointment Cancelled",
+        description: "Your appointment has been cancelled successfully.",
+      })
+    } catch (error) {
+      console.error("Error cancelling appointment:", error)
+      toast({
+        title: "Error",
+        description: "Failed to cancel appointment. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }, [])
 
   const filteredDoctors = useMemo(() => {
     return doctors.filter(doctor => 
@@ -346,7 +392,7 @@ export default function AyurvedicDoctorLocator() {
             <h3 className="text-lg font-medium mb-2">Popular Specializations</h3>
             <div className="flex flex-wrap gap-2">
               {['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine'].map((specialization) => (
-                <Button key={specialization} variant="outline" size="sm" onClick={() => {
+                <Button key={specialization} variant="outline" size="sm"   onClick={() => {
                   setSearchQuery(specialization)
                   setCurrentPage('doctorListing')
                 }}>
@@ -372,6 +418,24 @@ export default function AyurvedicDoctorLocator() {
           </Suspense>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Upcoming Appointments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {appointments.filter(a => a.status === 'scheduled').slice(0, 3).map((appointment) => (
+            <div key={appointment.id} className="mb-4 p-4 border rounded-lg">
+              <p className="font-semibold">{appointment.doctorName}</p>
+              <p>{appointment.date} at {appointment.time}</p>
+              <p className="text-sm text-muted-foreground">{appointment.reason}</p>
+            </div>
+          ))}
+          {appointments.filter(a => a.status === 'scheduled').length > 3 && (
+            <Button variant="link" onClick={() => setCurrentPage('userProfile')}>View all appointments</Button>
+          )}
+        </CardContent>
+      </Card>
     </motion.div>
   )
 
@@ -393,7 +457,6 @@ export default function AyurvedicDoctorLocator() {
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap gap-2">
           <Select value={sortOption} onValueChange={setSortOption}>
-            
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -637,7 +700,8 @@ export default function AyurvedicDoctorLocator() {
           <form className="space-y-4" onSubmit={(e) => {
             e.preventDefault()
             const formData = new FormData(e.target as HTMLFormElement)
-            const appointment: Omit<Appointment, 'id' | 'userId'> = {
+            const appointment: Omit<Appointment, 'id' | 'userId' | 'status'> = {
+              doctorId: selectedDoctor?.id || '',
               doctorName: selectedDoctor?.name || '',
               date: formData.get('date') as string,
               time: formData.get('time') as string,
@@ -696,8 +760,7 @@ export default function AyurvedicDoctorLocator() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="max-w-4xl mx-auto space-y-8"
-    >
+      className="max-w-4xl mx-auto space-y-8">
       <Button variant="ghost" onClick={() => setCurrentPage('home')}>
         <ChevronLeft className="mr-2 h-3 w-2" />
         Back to Home
@@ -745,7 +808,7 @@ export default function AyurvedicDoctorLocator() {
         <TabsContent value="appointments">
           <Card>
             <CardHeader>
-              <CardTitle>Upcoming Appointments</CardTitle>
+              <CardTitle>Your Appointments</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -757,14 +820,27 @@ export default function AyurvedicDoctorLocator() {
                     </CardHeader>
                     <CardContent>
                       <p className="mb-2">Reason: {appointment.reason}</p>
+                      <p className="mb-2">Status: {appointment.status}</p>
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="outline">Reschedule</Button>
-                        <Button variant="destructive" onClick={async () => {
-                          await deleteDoc(doc(db, 'appointments', appointment.id))
-                          setAppointments(appointments.filter(a => a.id !== appointment.id))
-                        }}>
-                          Cancel
-                        </Button>
+                        {appointment.status === 'scheduled' && (
+                          <>
+                            <Button variant="outline" onClick={() => {
+                              setSelectedAppointment(appointment)
+                              setIsRescheduling(true)
+                            }}>
+                              Request Reschedule
+                            </Button>
+                            <Button variant="destructive" onClick={() => cancelAppointment(appointment.id)}>
+                              Cancel
+                            </Button>
+                          </>
+                        )}
+                        {appointment.status === 'rescheduling' && (
+                          <Badge variant="secondary">Reschedule Requested</Badge>
+                        )}
+                        {appointment.status === 'cancelled' && (
+                          <Badge variant="destructive">Cancelled</Badge>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -890,6 +966,26 @@ export default function AyurvedicDoctorLocator() {
       </main>
 
       {renderFooter()}
+
+      <Dialog open={isRescheduling} onOpenChange={setIsRescheduling}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Appointment Reschedule</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to request a reschedule for your appointment with {selectedAppointment?.doctorName} on {selectedAppointment?.date} at {selectedAppointment?.time}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsRescheduling(false)}>Cancel</Button>
+            <Button onClick={() => {
+              if (selectedAppointment) {
+                requestReschedule(selectedAppointment)
+                setIsRescheduling(false)
+              }
+            }}>Confirm Reschedule Request</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
