@@ -31,6 +31,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
 import { toast } from "@/hooks/use-toast"
 import { motion, AnimatePresence } from 'framer-motion'
+import { CookieConsent } from '@/components/CookieConsent'
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -343,7 +344,7 @@ export default function AyurvedicDoctorLocator() {
       transition={{ duration: 0.3 }}
       className="space-y-8"
     >
-      <div className="flex flex-col sm:flex-row items-center gap-4">
+      <div  className="flex flex-col sm:flex-row items-center gap-4">
         <Input
           type="text"
           placeholder="Search doctors, locations, or specializations"
@@ -392,7 +393,7 @@ export default function AyurvedicDoctorLocator() {
             <h3 className="text-lg font-medium mb-2">Popular Specializations</h3>
             <div className="flex flex-wrap gap-2">
               {['Panchakarma', 'Nadi Pariksha', 'Ayurvedic Massage', 'Herbal Medicine'].map((specialization) => (
-                <Button key={specialization} variant="outline" size="sm"   onClick={() => {
+                <Button key={specialization} variant="outline" size="sm" onClick={() => {
                   setSearchQuery(specialization)
                   setCurrentPage('doctorListing')
                 }}>
@@ -760,7 +761,8 @@ export default function AyurvedicDoctorLocator() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="max-w-4xl mx-auto space-y-8">
+      className="max-w-4xl mx-auto space-y-8"
+    >
       <Button variant="ghost" onClick={() => setCurrentPage('home')}>
         <ChevronLeft className="mr-2 h-3 w-2" />
         Back to Home
@@ -986,6 +988,8 @@ export default function AyurvedicDoctorLocator() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CookieConsent />
     </div>
   )
 }
